@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>小班听说游戏</title>
 
-    <!-- 建议用较新的 html5-qrcode -->
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
 
     <style>
         body {
@@ -34,7 +33,7 @@
 
         #reader {
             width: 100%;
-            max-width: 500px;
+            max-width: 520px;
             margin: 20px auto 0;
             border: 15px solid white;
             border-radius: 40px;
@@ -109,9 +108,9 @@
 
         let html5QrCode = null;
         let scannerStarted = false;
+        let scanLocked = false;
 
         async function unlockAudio() {
-            // iOS 音频解锁
             audio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
             try {
                 await audio.play();
@@ -128,39 +127,45 @@
         }
 
         async function startApp() {
+            scanLocked = false;
+
             try {
                 await unlockAudio();
 
                 setupScreen.style.display = "none";
                 playScreen.style.display = "none";
+                playBtn.style.display = "none";
                 reader.style.display = "block";
                 setStatus("正在请求相机权限...");
 
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    alert("当前浏览器不支持摄像头。请使用 Safari 打开这个网页。");
+                    alert("当前浏览器不支持摄像头，请使用 Safari 打开。");
                     resetGame();
                     return;
                 }
 
                 if (!window.isSecureContext) {
-                    alert("当前网页不是安全环境，摄像头无法开启。请确认使用的是 GitHub Pages 的 https 链接。");
+                    alert("当前网页不是 HTTPS 安全环境，无法调用摄像头。");
                     resetGame();
                     return;
                 }
 
                 if (!html5QrCode) {
-                    html5QrCode = new Html5Qrcode("reader");
+                    html5QrCode = new Html5Qrcode("reader", {
+                        formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ],
+                        verbose: false
+                    });
                 }
 
-                // 先请求一次权限，避免某些 iOS 设备拿不到摄像头 label
+                // 先申请权限，方便 iOS 获取 camera label
                 try {
                     const tempStream = await navigator.mediaDevices.getUserMedia({
                         video: true,
                         audio: false
                     });
                     tempStream.getTracks().forEach(track => track.stop());
-                } catch (permErr) {
-                    console.log("相机权限预请求失败:", permErr);
+                } catch (e) {
+                    console.log("预请求权限失败:", e);
                 }
 
                 setStatus("正在寻找可用摄像头...");
@@ -168,31 +173,29 @@
                 const devices = await Html5Qrcode.getCameras();
 
                 if (!devices || devices.length === 0) {
-                    alert("没有检测到摄像头。请检查 iPhone/iPad 的相机权限，并尽量使用 Safari 打开。");
+                    alert("没有检测到摄像头，请检查 Safari 的相机权限。");
                     resetGame();
                     return;
                 }
 
                 console.log("可用摄像头:", devices);
 
-                // 优先找后置摄像头
                 let backCamera = devices.find(device =>
                     /back|rear|environment|后|背面/i.test(device.label)
                 );
 
-                // 如果没找到后置，就默认第一个
                 const cameraId = backCamera ? backCamera.id : devices[0].id;
 
                 const config = {
-                    fps: 10,
-                    qrbox: { width: 250, height: 250 },
+                    fps: 15,
+                    qrbox: { width: 320, height: 320 },
                     aspectRatio: 1.0,
                     rememberLastUsedCamera: true,
                     showTorchButtonIfSupported: true,
                     showZoomSliderIfSupported: true
                 };
 
-                setStatus("正在启动摄像头...");
+                setStatus("请把二维码放大，尽量对准中间区域...");
 
                 await html5QrCode.start(
                     cameraId,
@@ -202,33 +205,23 @@
                 );
 
                 scannerStarted = true;
-                setStatus("请把二维码放到框内");
+                setStatus("请把二维码放到框内，稍微靠近一点");
             } catch (err) {
                 console.error("启动摄像头失败:", err);
-
-                let msg = "相机启动失败。";
-
-                if (err && err.name === "NotAllowedError") {
-                    msg += "\n请到系统设置或 Safari 设置中允许相机权限。";
-                } else if (err && err.name === "NotFoundError") {
-                    msg += "\n没有找到可用摄像头。";
-                } else if (err && err.name === "NotReadableError") {
-                    msg += "\n摄像头可能正被其他程序占用。";
-                } else {
-                    msg += "\n请尽量使用 Safari 打开，不要在微信或其他内置浏览器中打开。";
-                }
-
-                alert(msg);
+                alert("相机已打开失败或识别初始化失败。请尽量使用 Safari，并确认已允许相机权限。");
                 resetGame();
             }
         }
 
         function onScanFailure(error) {
-            // 扫描过程中频繁失败属于正常现象，这里不弹窗
+            // 识别失败是正常过程，不弹窗
             // console.log("scan failure:", error);
         }
 
         async function onScanSuccess(decodedText) {
+            if (scanLocked) return;
+            scanLocked = true;
+
             try {
                 const fileName = decodedText.trim() + ".mp3";
                 console.log("扫码结果:", decodedText, "=>", fileName);
@@ -248,18 +241,19 @@
                 try {
                     await audio.play();
                 } catch (e) {
-                    console.log("自动播放失败，需要手动点击:", e);
+                    console.log("自动播放失败，等待手动点击:", e);
                 }
             } catch (err) {
                 console.error("扫码成功后处理失败:", err);
-                alert("二维码识别成功，但播放音频失败。请检查 mp3 文件名是否和二维码内容一致。");
+                alert("识别到了二维码，但播放音频失败。请检查二维码内容是否和 mp3 文件名一致。");
+                scanLocked = false;
             }
         }
 
         function playAudio() {
             audio.play().catch(err => {
                 console.log("手动播放失败:", err);
-                alert("播放失败，请确认音频文件存在，并且文件名和二维码内容一致。");
+                alert("播放失败，请检查音频文件名是否正确。");
             });
         }
 
@@ -275,6 +269,7 @@
 
             audio.pause();
             audio.currentTime = 0;
+            scanLocked = false;
 
             setupScreen.style.display = "block";
             reader.style.display = "none";
