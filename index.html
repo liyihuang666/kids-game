@@ -2,26 +2,42 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>小班听说游戏</title>
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>小班听说游戏 | 连续扫码播放</title>
     <script src="https://unpkg.com/html5-qrcode@2.3.8"></script>
-
     <style>
+        * {
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
             background-color: #F1F8E9;
             margin: 0;
-            padding: 20px;
+            padding: 0;
             text-align: center;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        /* 通用容器 */
+        .screen {
+            transition: opacity 0.2s ease;
         }
 
         #setup-screen {
-            margin-top: 110px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
         }
 
         .big-btn {
-            padding: 38px 76px;
+            padding: 28px 60px;
             font-size: 32px;
             border-radius: 80px;
             background: #4CAF50;
@@ -29,348 +45,592 @@
             border: none;
             box-shadow: 0 12px 0 #2E7D32;
             cursor: pointer;
-            -webkit-tap-highlight-color: transparent;
+            transition: 0.05s linear;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+        .big-btn:active {
+            transform: translateY(3px);
+            box-shadow: 0 8px 0 #2E7D32;
         }
 
         #scanner-screen {
             display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #1e2a1e;
+            z-index: 10;
+            padding-top: 20px;
+            box-sizing: border-box;
+            overflow: auto;
         }
 
         #reader {
-            width: 100%;
-            max-width: 500px;
+            width: 90%;
+            max-width: 480px;
             margin: 20px auto 0;
-            border: 15px solid white;
-            border-radius: 40px;
+            border-radius: 48px;
             overflow: hidden;
             background: #000;
-            min-height: 300px;
+            aspect-ratio: 1 / 1;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+
+        .scanner-footer {
+            margin-top: 30px;
+            text-align: center;
+        }
+        .back-home-btn {
+            background: #FFB74D;
+            border: none;
+            padding: 12px 28px;
+            font-size: 20px;
+            border-radius: 60px;
+            font-weight: bold;
+            color: #3e2723;
+            box-shadow: 0 4px 0 #F57C00;
+            cursor: pointer;
+            margin-top: 15px;
+        }
+        .status-text {
+            font-size: 22px;
+            color: white;
+            background: rgba(0,0,0,0.6);
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 60px;
+            margin: 16px auto;
+            backdrop-filter: blur(4px);
         }
 
         #play-screen {
             display: none;
             position: fixed;
             inset: 0;
-            z-index: 9999;
+            z-index: 1000;
             background: #F1F8E9;
-            padding: 36px 20px 24px;
             box-sizing: border-box;
-            overflow: auto;
             text-align: center;
+            padding: 36px 20px 24px;
+            overflow-y: auto;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
 
         #play-btn {
-            display: inline-block;
-            width: 240px;
-            height: 240px;
+            width: 220px;
+            height: 220px;
             background: #FF9800;
             color: white;
             border: none;
             border-radius: 50%;
-            font-size: 100px;
-            margin: 50px auto 24px;
-            box-shadow: 0 15px 0 #E65100;
+            font-size: 90px;
+            margin: 20px auto;
+            box-shadow: 0 12px 0 #E65100;
             cursor: pointer;
-            -webkit-tap-highlight-color: transparent;
+            transition: 0.05s linear;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #play-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 6px 0 #E65100;
         }
 
         .status {
-            font-size: 26px;
-            color: #333;
-            margin-top: 26px;
+            font-size: 28px;
+            color: #2E7D32;
             font-weight: bold;
-            line-height: 1.5;
+            margin: 12px 0;
         }
 
         .small-text {
-            color: #888;
-            margin-top: 30px;
+            color: #5d6e5a;
+            margin-top: 18px;
             font-size: 18px;
         }
 
         .action-row {
-            margin-top: 10px;
+            margin-top: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 12px;
         }
 
         .action-btn {
-            display: inline-block;
-            min-width: 210px;
-            padding: 18px 24px;
-            margin: 10px 8px;
-            font-size: 26px;
-            border-radius: 24px;
+            min-width: 160px;
+            padding: 14px 22px;
+            font-size: 24px;
+            border-radius: 60px;
             border: none;
             color: white;
+            font-weight: bold;
             cursor: pointer;
-            -webkit-tap-highlight-color: transparent;
+            transition: 0.05s linear;
+            box-shadow: 0 6px 0 rgba(0,0,0,0.2);
         }
-
-        .green-btn {
-            background: #4CAF50;
-            box-shadow: 0 8px 0 #2E7D32;
+        .action-btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 3px 0 rgba(0,0,0,0.2);
         }
+        .green-btn { background: #4CAF50; }
+        .orange-btn { background: #FF9800; }
+        .gray-btn { background: #78909C; }
 
-        .orange-btn {
-            background: #FF9800;
-            box-shadow: 0 8px 0 #E65100;
+        .loading-tip {
+            font-size: 18px;
+            color: #ffe0b5;
+            margin-top: 20px;
         }
-
-        .gray-btn {
-            background: #90A4AE;
-            box-shadow: 0 8px 0 #607D8B;
+        @media (max-width: 550px) {
+            .big-btn { padding: 20px 44px; font-size: 28px; }
+            #play-btn { width: 180px; height: 180px; font-size: 72px; }
+            .action-btn { min-width: 130px; font-size: 20px; padding: 12px 16px; }
+            .status { font-size: 24px; }
         }
     </style>
 </head>
 <body>
 
-    <div id="setup-screen">
-        <h1 style="color: #2E7D32;">听说游戏开始啦</h1>
-        <button class="big-btn" onclick="startApp()">点我开始</button>
-        <p class="small-text">(老师请帮小朋友点一下)</p>
+<div id="setup-screen" class="screen">
+    <h1 style="color: #2E7D32;">🎧 听说游戏 🎤</h1>
+    <button class="big-btn" id="start-btn">🔍 点我开始</button>
+    <p class="small-text">(老师请帮小朋友点一下，开启相机)</p>
+</div>
+
+<div id="scanner-screen" class="screen">
+    <div id="reader"></div>
+    <div class="scanner-footer">
+        <div id="scanner-status" class="status-text">⚡ 准备就绪</div>
+        <button class="back-home-btn" id="manual-home-btn">🏠 返回首页</button>
     </div>
+    <div class="loading-tip">📷 请将二维码置于框内，自动识别</div>
+</div>
 
-    <div id="scanner-screen">
-        <div id="reader"></div>
-        <div id="status" class="status"></div>
+<div id="play-screen" class="screen">
+    <button id="play-btn">🔊</button>
+    <p class="status" style="color:#EF6C00;">✨ 找到声音啦！点大球听故事 ✨</p>
+    <div class="action-row">
+        <button class="action-btn orange-btn" id="replay-btn">🔁 再听一次</button>
+        <button class="action-btn green-btn" id="rescan-new-btn">📷 再扫一个</button>
     </div>
-
-    <div id="play-screen">
-        <button id="play-btn" onclick="playAudio()">▶️</button>
-        <p class="status" style="color: #FF9800;">找到声音啦！快点球球</p>
-
-        <div class="action-row">
-            <button class="action-btn orange-btn" onclick="playAudio()">再听一次</button>
-            <button class="action-btn green-btn" onclick="rescanCard()">再扫一个</button>
-        </div>
-
-        <div class="action-row">
-            <button class="action-btn gray-btn" onclick="stopAudio()">停止播放</button>
-        </div>
+    <div class="action-row">
+        <button class="action-btn gray-btn" id="stop-audio-btn">⏹️ 停止播放</button>
     </div>
+    <p class="small-text">🎵 扫不同卡片，听不同声音~</p>
+</div>
 
-    <audio id="audio-player" playsinline webkit-playsinline></audio>
+<audio id="audio-player" preload="auto" playsinline webkit-playsinline></audio>
 
-    <script>
-        const audio = document.getElementById("audio-player");
-        const setupScreen = document.getElementById("setup-screen");
-        const scannerScreen = document.getElementById("scanner-screen");
-        const reader = document.getElementById("reader");
-        const statusText = document.getElementById("status");
-        const playScreen = document.getElementById("play-screen");
-        const playBtn = document.getElementById("play-btn");
+<script>
+    // ---------- DOM 元素 ----------
+    const setupScreen = document.getElementById("setup-screen");
+    const scannerScreen = document.getElementById("scanner-screen");
+    const playScreen = document.getElementById("play-screen");
+    const readerDiv = document.getElementById("reader");
+    const scannerStatusSpan = document.getElementById("scanner-status");
+    const audioPlayer = document.getElementById("audio-player");
+    const playBtn = document.getElementById("play-btn");
+    const replayBtn = document.getElementById("replay-btn");
+    const rescanNewBtn = document.getElementById("rescan-new-btn");
+    const stopAudioBtn = document.getElementById("stop-audio-btn");
+    const startBtn = document.getElementById("start-btn");
+    const manualHomeBtn = document.getElementById("manual-home-btn");
 
-        let html5QrCode = null;
-        let scannerStarted = false;
-        let scanHandled = false;
-        let currentAudioFile = "";
+    // ---------- 全局变量 ----------
+    let html5QrCode = null;          // 扫码实例
+    let isScanning = false;          // 扫码器是否正在运行
+    let isProcessing = false;         // 防止重复扫码/切换中
+    let currentAudioFile = "";        // 当前音频文件名
+    let lastScannedCode = "";          // 避免重复相同码
 
-        async function unlockAudio() {
-            audio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
+    // ---------- 辅助函数 ----------
+    function setScannerStatus(msg, isError = false) {
+        if (scannerStatusSpan) {
+            scannerStatusSpan.innerText = msg;
+            scannerStatusSpan.style.background = isError ? "rgba(180, 50, 40, 0.8)" : "rgba(0,0,0,0.65)";
+        }
+    }
+
+    // 彻底停止并销毁扫码器，释放相机资源
+    async function destroyScanner() {
+        if (html5QrCode && isScanning) {
             try {
-                await audio.play();
-                audio.pause();
-                audio.currentTime = 0;
+                await html5QrCode.stop();
             } catch (e) {
-                console.log("音频解锁失败:", e);
+                console.warn("停止扫码器时出错(可忽略):", e);
             }
+            isScanning = false;
         }
-
-        function setStatus(text) {
-            statusText.innerText = text || "";
-        }
-
-        function showScannerUI() {
-            setupScreen.style.display = "none";
-            scannerScreen.style.display = "block";
-            playScreen.style.display = "none";
-        }
-
-        function showPlayerUI() {
-            playScreen.style.display = "block";
-        }
-
-        async function stopScannerSilently() {
-            if (scannerStarted && html5QrCode) {
-                try {
-                    await html5QrCode.stop();
-                } catch (e) {
-                    console.log("停止扫码器失败，已忽略:", e);
-                }
-            }
-            scannerStarted = false;
-        }
-
-        async function startApp() {
-            scanHandled = false;
-            currentAudioFile = "";
-
+        // 移除旧实例, 下次会重新创建
+        if (html5QrCode) {
+            // 清理DOM中的video元素（html5-qrcode内部会自动清理，但保险）
             try {
-                await unlockAudio();
-
-                showScannerUI();
-                setStatus("正在请求相机权限...");
-
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    alert("当前浏览器不支持摄像头。请使用 Safari 打开这个网页。");
-                    resetToHome();
-                    return;
+                if (html5QrCode.isScanning) await html5QrCode.stop();
+            } catch(e) {}
+            html5QrCode = null;
+        }
+        // 额外释放所有视频轨道（冗余安全）
+        if (window.stream && window.stream.getTracks) {
+            window.stream.getTracks().forEach(track => {
+                if (track.readyState === 'live' && track.kind === 'video') {
+                    track.stop();
                 }
-
-                if (!window.isSecureContext) {
-                    alert("当前网页不是安全环境，摄像头无法开启。请确认使用的是 GitHub Pages 的 https 链接。");
-                    resetToHome();
-                    return;
-                }
-
-                if (!html5QrCode) {
-                    html5QrCode = new Html5Qrcode("reader");
-                }
-
-                try {
-                    const tempStream = await navigator.mediaDevices.getUserMedia({
-                        video: true,
-                        audio: false
-                    });
-                    tempStream.getTracks().forEach(track => track.stop());
-                } catch (permErr) {
-                    console.log("相机权限预请求失败:", permErr);
-                }
-
-                setStatus("正在寻找可用摄像头...");
-
-                const devices = await Html5Qrcode.getCameras();
-
-                if (!devices || devices.length === 0) {
-                    alert("没有检测到摄像头。请检查 iPhone/iPad 的相机权限，并尽量使用 Safari 打开。");
-                    resetToHome();
-                    return;
-                }
-
-                let backCamera = devices.find(device =>
-                    /back|rear|environment|后|背面/i.test(device.label || "")
-                );
-
-                const cameraId = backCamera ? backCamera.id : devices[0].id;
-
-                const config = {
-                    fps: 10,
-                    qrbox: { width: 250, height: 250 },
-                    aspectRatio: 1.0,
-                    rememberLastUsedCamera: true,
-                    showTorchButtonIfSupported: true,
-                    showZoomSliderIfSupported: true
-                };
-
-                setStatus("正在启动摄像头...");
-
-                await html5QrCode.start(
-                    cameraId,
-                    config,
-                    onScanSuccess,
-                    onScanFailure
-                );
-
-                scannerStarted = true;
-                setStatus("请把二维码放到框内");
-            } catch (err) {
-                console.error("启动摄像头失败:", err);
-
-                if (scanHandled) {
-                    console.log("已成功扫码，忽略后续相机异常");
-                    return;
-                }
-
-                let msg = "相机启动失败。";
-
-                if (err && err.name === "NotAllowedError") {
-                    msg += "\n请到系统设置或 Safari 设置中允许相机权限。";
-                } else if (err && err.name === "NotFoundError") {
-                    msg += "\n没有找到可用摄像头。";
-                } else if (err && err.name === "NotReadableError") {
-                    msg += "\n摄像头可能正被其他程序占用。";
-                } else {
-                    msg += "\n请尽量使用 Safari 打开，不要在微信或其他内置浏览器中打开。";
-                }
-
-                alert(msg);
-                resetToHome();
+            });
+            window.stream = null;
+        }
+        // 查找页面上可能残留的视频元素并移除（清理干净）
+        const videos = document.querySelectorAll("#reader video");
+        videos.forEach(video => {
+            if (video.srcObject) {
+                const tracks = video.srcObject.getTracks();
+                tracks.forEach(t => t.stop());
+                video.srcObject = null;
             }
+        });
+    }
+
+    // 重置所有界面到首页（彻底恢复）
+    async function fullResetToHome() {
+        if (isProcessing) return;
+        isProcessing = true;
+        // 停止所有音频
+        audioPlayer.pause();
+        audioPlayer.currentTime = 0;
+        currentAudioFile = "";
+        lastScannedCode = "";
+        // 销毁扫码器
+        await destroyScanner();
+        // 隐藏所有功能屏，显示首页
+        setupScreen.style.display = "flex";
+        scannerScreen.style.display = "none";
+        playScreen.style.display = "none";
+        isProcessing = false;
+    }
+
+    // 显示扫码界面并启动相机（全新启动）
+    async function showAndStartScanner() {
+        // 防止重复进入
+        if (isProcessing) {
+            console.log("正在处理中，稍后再试");
+            return false;
+        }
+        isProcessing = true;
+
+        // 1. 先彻底清理旧的扫码器
+        await destroyScanner();
+        
+        // 2. 隐藏其他屏，显示扫码屏
+        setupScreen.style.display = "none";
+        playScreen.style.display = "none";
+        scannerScreen.style.display = "block";
+        setScannerStatus("🔐 请求相机权限...");
+
+        // 3. 检查环境
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            alert("当前浏览器不支持摄像头。请使用 Safari 或 系统浏览器打开。");
+            await fullResetToHome();
+            isProcessing = false;
+            return false;
+        }
+        if (!window.isSecureContext) {
+            alert("请使用 HTTPS 网页访问（GitHub Pages 或本地测试需用 https/localhost）");
+            await fullResetToHome();
+            isProcessing = false;
+            return false;
         }
 
-        function onScanFailure(error) {
-            // 正常现象，不弹窗
+        // 4. 预检查权限（用户体验）
+        try {
+            const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            tempStream.getTracks().forEach(t => t.stop());
+        } catch (permErr) {
+            console.warn("预授权失败", permErr);
+            // 继续尝试，但系统会弹出授权框
         }
 
-        async function onScanSuccess(decodedText) {
-            if (scanHandled) return;
-            scanHandled = true;
+        setScannerStatus("📷 寻找摄像头...");
+        try {
+            // 获取摄像头列表
+            const devices = await Html5Qrcode.getCameras();
+            if (!devices || devices.length === 0) {
+                alert("未检测到摄像头，请检查权限或在 Safari 中开启相机。");
+                await fullResetToHome();
+                isProcessing = false;
+                return false;
+            }
+            // 优先后置摄像头
+            let backCam = devices.find(device => 
+                /back|rear|environment|后置|背面/i.test(device.label)
+            );
+            const cameraId = backCam ? backCam.id : devices[0].id;
 
+            // 新建实例
+            html5QrCode = new Html5Qrcode("reader");
+            const config = {
+                fps: 12,
+                qrbox: { width: 260, height: 260 },
+                aspectRatio: 1.0,
+                showTorchButtonIfSupported: true,
+                showZoomSliderIfSupported: true,
+                rememberLastUsedCamera: true
+            };
+
+            setScannerStatus("🚀 启动相机中...");
+            await html5QrCode.start(
+                cameraId,
+                config,
+                (decodedText) => onScanSuccess(decodedText),
+                (errorMsg) => {
+                    // 扫描失败是正常的，不显示错误提示，避免干扰
+                    if (errorMsg && errorMsg.includes("No MultiFormat Readers")) {
+                        // 静默处理
+                    }
+                }
+            );
+            isScanning = true;
+            setScannerStatus("✅ 对准二维码，自动识别");
+            isProcessing = false;
+            return true;
+        } catch (err) {
+            console.error("启动相机彻底失败:", err);
+            let errorMsg = "相机启动失败。";
+            if (err && err.name === "NotAllowedError") {
+                errorMsg += " 请在设置中允许相机权限。";
+            } else if (err && err.name === "NotFoundError") {
+                errorMsg += " 未找到摄像头设备。";
+            } else if (err && err.name === "NotReadableError") {
+                errorMsg += " 摄像头被占用，请关闭其他相机应用。";
+            } else {
+                errorMsg += " 推荐使用 Safari 浏览器打开。";
+            }
+            alert(errorMsg);
+            await fullResetToHome();
+            isProcessing = false;
+            return false;
+        }
+    }
+
+    // 扫码成功后的处理（播放界面，停止相机）
+    async function onScanSuccess(decodedText) {
+        // 防止重复扫码、界面切换中触发多次
+        if (isProcessing) {
+            console.log("已有操作进行中，忽略本次扫码");
+            return;
+        }
+        // 避免连续扫到同一个码重复触发
+        if (lastScannedCode === decodedText && currentAudioFile !== "") {
+            console.log("相同二维码已处理过，不重复触发");
+            return;
+        }
+        
+        isProcessing = true;
+        // 记录最后扫描的内容
+        lastScannedCode = decodedText;
+        const fileName = (decodedText || "").trim() + ".mp3";
+        currentAudioFile = fileName;
+        console.log(`扫码成功: ${decodedText} -> 音频: ${fileName}`);
+        
+        // 重要: 停止扫码器并且隐藏相机画面，避免残留卡住
+        if (html5QrCode && isScanning) {
             try {
-                const fileName = String(decodedText || "").trim() + ".mp3";
-                currentAudioFile = fileName;
-                console.log("扫码结果:", decodedText, "=>", fileName);
-
-                // 先显示全屏播放层，彻底盖住黑色扫码框
-                showPlayerUI();
-
-                audio.src = encodeURI(fileName);
-                audio.load();
-
-                try {
-                    await audio.play();
-                } catch (e) {
-                    console.log("自动播放失败，需要手动点击:", e);
-                }
-
-                // 再后台静默停相机
-                setTimeout(() => {
-                    stopScannerSilently();
-                }, 0);
-            } catch (err) {
-                console.error("扫码成功后处理失败:", err);
-                alert("二维码识别成功，但播放音频失败。请检查 mp3 文件名是否和二维码内容一致。");
-            }
+                await html5QrCode.stop();
+            } catch(e) { console.warn("停止相机失败", e); }
+            isScanning = false;
         }
-
-        function playAudio() {
-            if (!currentAudioFile) return;
-
-            audio.src = encodeURI(currentAudioFile);
-            audio.load();
-            audio.play().catch(err => {
-                console.log("手动播放失败:", err);
-                alert("播放失败，请确认音频文件存在，并且文件名和二维码内容一致。");
+        // 强制隐藏扫码界面（确保播放界面独占）
+        scannerScreen.style.display = "none";
+        
+        // 显示播放界面
+        playScreen.style.display = "flex";
+        
+        // 设置音频并尝试自动播放
+        audioPlayer.src = encodeURI(fileName);
+        audioPlayer.load();
+        
+        // 自动播放（iOS需要用户之前有过交互，开始页按钮已解锁，再扫一个也有用户点击，所以可以自动）
+        const playPromise = audioPlayer.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(e => {
+                console.log("自动播放被阻止，请手动点击大按钮:", e);
+                // 不弹窗，用户可点按钮播放
             });
         }
+        
+        isProcessing = false;
+    }
 
-        function stopAudio() {
-            audio.pause();
-            audio.currentTime = 0;
+    // 播放音频（手动）
+    function playAudio() {
+        if (!currentAudioFile) {
+            console.warn("无音频文件可播放");
+            return;
         }
-
-        async function rescanCard() {
+        // 如果当前src不对，重新加载
+        if (!audioPlayer.src || !audioPlayer.src.endsWith(encodeURI(currentAudioFile))) {
+            audioPlayer.src = encodeURI(currentAudioFile);
+            audioPlayer.load();
+        }
+        audioPlayer.play().catch(err => {
+            console.error("播放失败:", err);
+            alert("播放失败，请确认音频文件存在，且文件名与二维码内容一致。\n文件名：" + currentAudioFile);
+        });
+    }
+    
+    function stopAudio() {
+        audioPlayer.pause();
+        audioPlayer.currentTime = 0;
+    }
+    
+    // 再扫一个：完全重启扫码流程 (核心修复点)
+    async function rescanCard() {
+        if (isProcessing) {
+            console.log("正在处理切换，请稍后");
+            return;
+        }
+        // 停止当前播放的音频
+        stopAudio();
+        // 清空当前音频标记，重置重复标记 (允许扫同一个再次重新播放)
+        currentAudioFile = "";
+        // 注意不清除 lastScannedCode，但为了严谨允许重新扫相同卡片时重新触发，重置一下
+        // 但为了让同一张卡再次扫能再次播放，需要清空 lastScannedCode 避免 onScanSuccess 被拦截
+        lastScannedCode = "";
+        
+        // 1. 隐藏播放界面
+        playScreen.style.display = "none";
+        // 2. 彻底销毁扫码器（释放相机资源）
+        await destroyScanner();
+        // 3. 重新启动相机和扫码界面
+        await showAndStartScanner();
+    }
+    
+    // 主动解锁音频上下文（iOS WebAudio 限制）
+    async function unlockAudioContext() {
+        // 使用一个极短 silent wav 来激活 audio 元素
+        audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
+        try {
+            await audioPlayer.play();
+            audioPlayer.pause();
+            audioPlayer.currentTime = 0;
+            console.log("音频上下文已解锁");
+        } catch (e) {
+            console.log("解锁失败，但不影响手动播放");
+        }
+    }
+    
+    // 页面初始化 + 事件绑定
+    async function initEventListeners() {
+        // 开始游戏（点击主按钮）
+        startBtn.onclick = async () => {
+            // 先解锁音频 (用户手势)
+            await unlockAudioContext();
+            // 启动扫码流程
+            await showAndStartScanner();
+        };
+        
+        // 再扫一个（播放界面按钮）
+        rescanNewBtn.onclick = async () => {
+            await rescanCard();
+        };
+        
+        // 再听一次
+        replayBtn.onclick = () => {
+            playAudio();
+        };
+        
+        // 停止播放
+        stopAudioBtn.onclick = () => {
             stopAudio();
-            scanHandled = false;
-            currentAudioFile = "";
-            playScreen.style.display = "none";
-            await stopScannerSilently();
-            await startApp();
+        };
+        
+        // 大播放按钮
+        playBtn.onclick = () => {
+            playAudio();
+        };
+        
+        // 手动返回首页（任何卡住时救急）
+        manualHomeBtn.onclick = async () => {
+            await fullResetToHome();
+        };
+        
+        // 额外: 如果扫码界面点击返回首页按钮同样重置
+        // 避免相机启动失败后无法操作
+        const homeFromScanner = document.getElementById("manual-home-btn");
+        if(homeFromScanner) {
+            // 上面已经绑定 manualHomeBtn， 同一个按钮，已有效
         }
-
-        async function resetToHome() {
-            scanHandled = false;
-            currentAudioFile = "";
-
-            await stopScannerSilently();
-
-            audio.pause();
-            audio.currentTime = 0;
-
-            setupScreen.style.display = "block";
-            scannerScreen.style.display = "none";
-            playScreen.style.display = "none";
-            playBtn.style.display = "none";
+    }
+    
+    // 页面启动后，展示首页， 确保所有功能干净
+    (function bootstrap() {
+        // 初始化界面：仅显示首页
+        setupScreen.style.display = "flex";
+        scannerScreen.style.display = "none";
+        playScreen.style.display = "none";
+        initEventListeners();
+        // 预置安全销毁任何可能遗留的扫码器
+        if (html5QrCode) {
+            destroyScanner().catch(e=>console.log);
         }
-    </script>
+        // 给整个页面增加一个触摸解锁保险（防止音频策略过严）
+        const globalUnlock = async () => {
+            await unlockAudioContext();
+            document.body.removeEventListener("touchstart", globalUnlock);
+            document.body.removeEventListener("click", globalUnlock);
+        };
+        document.body.addEventListener("touchstart", globalUnlock, { once: true });
+        document.body.addEventListener("click", globalUnlock, { once: true });
+        console.log("游戏已准备，点击「点我开始」使用相机");
+    })();
+    
+    // 增强：当页面隐藏时停止相机，节省资源（可选）
+    document.addEventListener("visibilitychange", async () => {
+        if (document.hidden && isScanning && html5QrCode) {
+            // 页面后台时停止相机，但保留实例标记
+            try {
+                await html5QrCode.stop();
+                isScanning = false;
+                console.log("页面后台，相机已暂停");
+            } catch(e) {}
+        } else if (!document.hidden && scannerScreen.style.display === "block" && !isScanning && html5QrCode) {
+            // 回到前台且扫码界面显示但相机未启动，尝试重启
+            if (html5QrCode && !isScanning) {
+                try {
+                    const devices = await Html5Qrcode.getCameras();
+                    if (devices && devices.length) {
+                        let backCam = devices.find(device => /back|rear|environment/i.test(device.label));
+                        const camId = backCam ? backCam.id : devices[0].id;
+                        await html5QrCode.start(camId, { fps: 10, qrbox: { width: 250, height: 250 } },
+                            (text) => onScanSuccess(text),
+                            () => {});
+                        isScanning = true;
+                        setScannerStatus("✅ 恢复扫描，对准二维码");
+                    }
+                } catch(e) { console.warn("恢复相机失败", e); }
+            }
+        }
+    });
+    
+    // 补丁：如果用户点击再扫一个时，由于某些异常相机未成功启动，手动调用重新扫描
+    window.rescanFallback = async function() {
+        if (scannerScreen.style.display === "block" && (!isScanning || !html5QrCode)) {
+            console.log("检测到扫码界面但相机未运行，尝试重启");
+            await destroyScanner();
+            await showAndStartScanner();
+        }
+    };
+    // 每3秒检查一次（仅在扫码界面显示时做轻量检查，不干扰性能）
+    setInterval(() => {
+        if (scannerScreen.style.display === "block" && !isProcessing && (!isScanning || !html5QrCode)) {
+            window.rescanFallback();
+        }
+    }, 4000);
+</script>
 </body>
 </html>
