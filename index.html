@@ -2,18 +2,14 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
-  />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>小班听说游戏</title>
-
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
-      background-color: #F1F8E9;
+      background: #F1F8E9;
       margin: 0;
       padding: 20px;
       text-align: center;
@@ -21,24 +17,24 @@
       user-select: none;
     }
 
-    #setup-screen {
-      margin-top: 90px;
-    }
-
     h1 {
       color: #2E7D32;
-      margin-bottom: 24px;
       font-size: 48px;
       line-height: 1.25;
+      margin-bottom: 24px;
+    }
+
+    #setup-screen {
+      margin-top: 90px;
     }
 
     .big-btn {
       padding: 30px 60px;
       font-size: 30px;
+      border: none;
       border-radius: 999px;
       background: #4CAF50;
-      color: white;
-      border: none;
+      color: #fff;
       box-shadow: 0 10px 0 #2E7D32;
       cursor: pointer;
       -webkit-tap-highlight-color: transparent;
@@ -93,11 +89,10 @@
     }
 
     #play-btn {
-      display: inline-block;
       width: 220px;
       height: 220px;
       background: #FF9800;
-      color: white;
+      color: #fff;
       border: none;
       border-radius: 50%;
       font-size: 96px;
@@ -197,6 +192,7 @@
     let scannerRunning = false;
     let scanLocked = false;
     let currentAudioFile = "";
+    let scannerToken = 0;
 
     function setStatus(text) {
       statusText.innerText = text || "";
@@ -242,28 +238,36 @@
     }
 
     async function destroyScanner() {
+      const local = html5QrCode;
+
+      if (!local) {
+        scannerRunning = false;
+        reader.innerHTML = "";
+        return;
+      }
+
       try {
-        if (html5QrCode && scannerRunning) {
-          await html5QrCode.stop();
+        if (scannerRunning) {
+          await local.stop();
         }
       } catch (e) {
         console.log("stop scanner error:", e);
       }
 
       try {
-        if (html5QrCode) {
-          await html5QrCode.clear();
-        }
+        await local.clear();
       } catch (e) {
         console.log("clear scanner error:", e);
       }
 
-      html5QrCode = null;
+      if (html5QrCode === local) {
+        html5QrCode = null;
+      }
       scannerRunning = false;
       reader.innerHTML = "";
     }
 
-    async function createScanner() {
+    async function buildScanner() {
       await destroyScanner();
       html5QrCode = new Html5Qrcode("reader", {
         formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
@@ -272,19 +276,21 @@
     }
 
     async function startScanner() {
-      currentAudioFile = "";
+      const token = ++scannerToken;
       scanLocked = false;
+      currentAudioFile = "";
+
       audio.pause();
       audio.currentTime = 0;
 
       if (!window.isSecureContext) {
-        alert("请使用 GitHub Pages 的 https 链接打开。");
+        setStatus("请使用 https 链接打开。");
         showHome();
         return;
       }
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        alert("当前浏览器不支持相机，请尽量使用 Safari。");
+        setStatus("当前浏览器不支持相机，请尽量使用 Safari。");
         showHome();
         return;
       }
@@ -293,7 +299,7 @@
       showScanner();
       setStatus("正在请求相机权限...");
 
-      await createScanner();
+      await buildScanner();
 
       try {
         const tempStream = await navigator.mediaDevices.getUserMedia({
@@ -304,6 +310,8 @@
       } catch (e) {
         console.log("预请求相机失败:", e);
       }
+
+      if (token !== scannerToken) return;
 
       const config = {
         fps: 12,
@@ -321,24 +329,27 @@
         await html5QrCode.start(
           { facingMode: "environment" },
           config,
-          onScanSuccess,
+          (decodedText) => onScanSuccess(decodedText, token),
           onScanFailure
         );
+        if (token !== scannerToken) return;
         scannerRunning = true;
-      } catch (e) {
-        console.log("启动后置相机失败:", e);
+      } catch (e1) {
+        console.log("environment 启动失败:", e1);
+
         try {
           await html5QrCode.start(
             { facingMode: "user" },
             { ...config, fps: 10 },
-            onScanSuccess,
+            (decodedText) => onScanSuccess(decodedText, token),
             onScanFailure
           );
+          if (token !== scannerToken) return;
           scannerRunning = true;
           setStatus("请把二维码放到框内");
         } catch (e2) {
-          console.log("备用相机也失败:", e2);
-          alert("相机启动失败，请检查 Safari 相机权限。");
+          console.log("user camera 启动失败:", e2);
+          setStatus("相机启动失败，请检查 Safari 相机权限。");
           await destroyScanner();
           showHome();
         }
@@ -349,8 +360,10 @@
       // 正常现象，不处理
     }
 
-    async function onScanSuccess(decodedText) {
+    async function onScanSuccess(decodedText, token) {
+      if (token !== scannerToken) return;
       if (scanLocked) return;
+
       scanLocked = true;
 
       const cleanText = String(decodedText || "").trim();
@@ -360,15 +373,15 @@
       }
 
       currentAudioFile = cleanText + ".mp3";
-      console.log("扫码结果:", currentAudioFile);
+
+      // 先把当前扫描会话作废，避免旧实例继续改页面
+      scannerToken++;
 
       // 先切到播放页
       showPlayer();
 
-      // 立刻异步销毁扫码器，避免它继续改页面
-      setTimeout(() => {
-        destroyScanner();
-      }, 0);
+      // 再销毁扫码器
+      destroyScanner();
 
       try {
         audio.src = encodeURI(currentAudioFile);
