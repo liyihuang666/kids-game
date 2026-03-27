@@ -33,7 +33,7 @@
 
         #reader {
             width: 100%;
-            max-width: 520px;
+            max-width: 500px;
             margin: 20px auto 0;
             border: 15px solid white;
             border-radius: 40px;
@@ -136,85 +136,94 @@
                 playScreen.style.display = "none";
                 playBtn.style.display = "none";
                 reader.style.display = "block";
-                setStatus("正在请求相机权限...");
+                setStatus("正在启动相机...");
 
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    alert("当前浏览器不支持摄像头，请使用 Safari 打开。");
+                    alert("当前浏览器不支持相机，请使用 Safari 打开。");
                     resetGame();
                     return;
                 }
 
                 if (!window.isSecureContext) {
-                    alert("当前网页不是 HTTPS 安全环境，无法调用摄像头。");
+                    alert("当前网页不是 HTTPS 安全环境，无法调用相机。");
                     resetGame();
                     return;
                 }
 
                 if (!html5QrCode) {
-                    html5QrCode = new Html5Qrcode("reader", {
-                        formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ],
-                        verbose: false
-                    });
+                    html5QrCode = new Html5Qrcode("reader");
                 }
-
-                // 先申请权限，方便 iOS 获取 camera label
-                try {
-                    const tempStream = await navigator.mediaDevices.getUserMedia({
-                        video: true,
-                        audio: false
-                    });
-                    tempStream.getTracks().forEach(track => track.stop());
-                } catch (e) {
-                    console.log("预请求权限失败:", e);
-                }
-
-                setStatus("正在寻找可用摄像头...");
-
-                const devices = await Html5Qrcode.getCameras();
-
-                if (!devices || devices.length === 0) {
-                    alert("没有检测到摄像头，请检查 Safari 的相机权限。");
-                    resetGame();
-                    return;
-                }
-
-                console.log("可用摄像头:", devices);
-
-                let backCamera = devices.find(device =>
-                    /back|rear|environment|后|背面/i.test(device.label)
-                );
-
-                const cameraId = backCamera ? backCamera.id : devices[0].id;
 
                 const config = {
-                    fps: 15,
-                    qrbox: { width: 320, height: 320 },
-                    aspectRatio: 1.0,
-                    rememberLastUsedCamera: true,
-                    showTorchButtonIfSupported: true,
-                    showZoomSliderIfSupported: true
+                    fps: 12,
+                    qrbox: { width: 300, height: 300 },
+                    aspectRatio: 1.0
                 };
 
-                setStatus("请把二维码放大，尽量对准中间区域...");
+                // 先试精确后置
+                try {
+                    await html5QrCode.start(
+                        { facingMode: { exact: "environment" } },
+                        config,
+                        onScanSuccess,
+                        onScanFailure
+                    );
+                    scannerStarted = true;
+                    setStatus("请把二维码放到框内");
+                    return;
+                } catch (err1) {
+                    console.log("精确后置相机失败:", err1);
+                }
 
-                await html5QrCode.start(
-                    cameraId,
-                    config,
-                    onScanSuccess,
-                    onScanFailure
-                );
+                // 再试普通后置
+                try {
+                    await html5QrCode.start(
+                        { facingMode: "environment" },
+                        config,
+                        onScanSuccess,
+                        onScanFailure
+                    );
+                    scannerStarted = true;
+                    setStatus("请把二维码放到框内");
+                    return;
+                } catch (err2) {
+                    console.log("普通后置相机失败:", err2);
+                }
 
-                scannerStarted = true;
-                setStatus("请把二维码放到框内，稍微靠近一点");
+                // 最后试枚举相机
+                try {
+                    const devices = await Html5Qrcode.getCameras();
+                    if (devices && devices.length > 0) {
+                        let backCamera = devices.find(device =>
+                            /back|rear|environment|后|背面/i.test(device.label)
+                        );
+                        const cameraId = backCamera ? backCamera.id : devices[0].id;
+
+                        await html5QrCode.start(
+                            cameraId,
+                            config,
+                            onScanSuccess,
+                            onScanFailure
+                        );
+                        scannerStarted = true;
+                        setStatus("请把二维码放到框内");
+                        return;
+                    }
+                } catch (err3) {
+                    console.log("枚举相机失败:", err3);
+                }
+
+                alert("相机启动失败。请尽量使用 Safari，并确认已允许相机权限。");
+                resetGame();
             } catch (err) {
-                console.error("启动摄像头失败:", err);
-                alert("相机已打开失败或识别初始化失败。请尽量使用 Safari，并确认已允许相机权限。");
+                console.error("启动失败:", err);
+                alert("相机初始化失败，请刷新页面后重试。");
                 resetGame();
             }
         }
 
         function onScanFailure(error) {
-            // 识别失败是正常过程，不弹窗
+            // 扫描过程中不断失败是正常现象，不弹窗
             // console.log("scan failure:", error);
         }
 
@@ -241,11 +250,11 @@
                 try {
                     await audio.play();
                 } catch (e) {
-                    console.log("自动播放失败，等待手动点击:", e);
+                    console.log("自动播放失败，需要手动点击:", e);
                 }
             } catch (err) {
                 console.error("扫码成功后处理失败:", err);
-                alert("识别到了二维码，但播放音频失败。请检查二维码内容是否和 mp3 文件名一致。");
+                alert("识别到了二维码，但播放音频失败。请检查 mp3 文件名是否和二维码内容一致。");
                 scanLocked = false;
             }
         }
