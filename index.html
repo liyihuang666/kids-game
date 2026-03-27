@@ -22,18 +22,18 @@
     }
 
     #setup-screen {
-      margin-top: 100px;
+      margin-top: 90px;
     }
 
     h1 {
       color: #2E7D32;
       margin-bottom: 24px;
-      font-size: 54px;
+      font-size: 48px;
       line-height: 1.25;
     }
 
     .big-btn {
-      padding: 34px 64px;
+      padding: 30px 60px;
       font-size: 30px;
       border-radius: 999px;
       background: #4CAF50;
@@ -55,7 +55,7 @@
       margin-top: 18px;
     }
 
-    #reader {
+    #reader-shell {
       width: 100%;
       max-width: 560px;
       margin: 0 auto;
@@ -63,6 +63,11 @@
       border-radius: 28px;
       overflow: hidden;
       background: #000;
+      min-height: 320px;
+    }
+
+    #reader {
+      width: 100%;
       min-height: 320px;
     }
 
@@ -84,7 +89,7 @@
 
     #play-screen {
       display: none;
-      margin-top: 38px;
+      margin-top: 40px;
     }
 
     #play-btn {
@@ -105,7 +110,7 @@
     .status-big {
       font-size: 28px;
       color: #FF9800;
-      margin: 10px 0 18px;
+      margin: 10px 0 20px;
       font-weight: bold;
       line-height: 1.5;
     }
@@ -151,7 +156,9 @@
   </div>
 
   <div id="scanner-screen">
-    <div id="reader"></div>
+    <div id="reader-shell">
+      <div id="reader"></div>
+    </div>
     <div id="status"></div>
     <div class="helper">请把二维码放近一点、摆正一点、光线亮一点</div>
   </div>
@@ -187,10 +194,9 @@
     const stopBtn = document.getElementById("stop-btn");
 
     let html5QrCode = null;
-    let scannerStarted = false;
-    let scanHandled = false;
+    let scannerRunning = false;
+    let scanLocked = false;
     let currentAudioFile = "";
-    let sessionId = 0;
 
     function setStatus(text) {
       statusText.innerText = text || "";
@@ -235,33 +241,30 @@
       };
     }
 
-    async function stopScannerSilently() {
-      if (html5QrCode && scannerStarted) {
-        try {
+    async function destroyScanner() {
+      try {
+        if (html5QrCode && scannerRunning) {
           await html5QrCode.stop();
-        } catch (e) {
-          console.log("停止扫码器失败（忽略）:", e);
         }
+      } catch (e) {
+        console.log("stop scanner error:", e);
       }
-      scannerStarted = false;
-    }
 
-    async function clearScannerSilently() {
-      if (html5QrCode) {
-        try {
+      try {
+        if (html5QrCode) {
           await html5QrCode.clear();
-        } catch (e) {
-          console.log("清理扫码器失败（忽略）:", e);
         }
+      } catch (e) {
+        console.log("clear scanner error:", e);
       }
+
+      html5QrCode = null;
+      scannerRunning = false;
+      reader.innerHTML = "";
     }
 
-    async function rebuildScanner() {
-      await stopScannerSilently();
-      await clearScannerSilently();
-      html5QrCode = null;
-      reader.innerHTML = "";
-
+    async function createScanner() {
+      await destroyScanner();
       html5QrCode = new Html5Qrcode("reader", {
         formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
         verbose: false
@@ -269,21 +272,19 @@
     }
 
     async function startScanner() {
-      const mySession = ++sessionId;
-      scanHandled = false;
       currentAudioFile = "";
-
+      scanLocked = false;
       audio.pause();
       audio.currentTime = 0;
 
       if (!window.isSecureContext) {
-        setStatus("请使用 GitHub Pages 的 https 链接打开。");
+        alert("请使用 GitHub Pages 的 https 链接打开。");
         showHome();
         return;
       }
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setStatus("当前浏览器不支持相机，请尽量使用 Safari。");
+        alert("当前浏览器不支持相机，请尽量使用 Safari。");
         showHome();
         return;
       }
@@ -292,7 +293,7 @@
       showScanner();
       setStatus("正在请求相机权限...");
 
-      await rebuildScanner();
+      await createScanner();
 
       try {
         const tempStream = await navigator.mediaDevices.getUserMedia({
@@ -305,9 +306,9 @@
       }
 
       const config = {
-        fps: 14,
+        fps: 12,
         qrbox: getQrboxSize,
-        rememberLastUsedCamera: true,
+        rememberLastUsedCamera: false,
         showTorchButtonIfSupported: true,
         showZoomSliderIfSupported: true,
         experimentalFeatures: {
@@ -316,93 +317,66 @@
       };
 
       try {
-        setStatus("正在启动相机...");
-        await html5QrCode.start(
-          { facingMode: { exact: "environment" } },
-          config,
-          onScanSuccess,
-          onScanFailure
-        );
-        if (mySession !== sessionId) return;
-        scannerStarted = true;
         setStatus("请把二维码放到框内");
-        return;
-      } catch (e1) {
-        console.log("exact environment 启动失败:", e1);
-      }
-
-      try {
-        setStatus("正在尝试兼容模式...");
         await html5QrCode.start(
           { facingMode: "environment" },
           config,
           onScanSuccess,
           onScanFailure
         );
-        if (mySession !== sessionId) return;
-        scannerStarted = true;
-        setStatus("请把二维码放到框内");
-        return;
-      } catch (e2) {
-        console.log("environment 启动失败:", e2);
+        scannerRunning = true;
+      } catch (e) {
+        console.log("启动后置相机失败:", e);
+        try {
+          await html5QrCode.start(
+            { facingMode: "user" },
+            { ...config, fps: 10 },
+            onScanSuccess,
+            onScanFailure
+          );
+          scannerRunning = true;
+          setStatus("请把二维码放到框内");
+        } catch (e2) {
+          console.log("备用相机也失败:", e2);
+          alert("相机启动失败，请检查 Safari 相机权限。");
+          await destroyScanner();
+          showHome();
+        }
       }
-
-      try {
-        setStatus("正在尝试备用模式...");
-        await html5QrCode.start(
-          { facingMode: "user" },
-          {
-            ...config,
-            fps: 10
-          },
-          onScanSuccess,
-          onScanFailure
-        );
-        if (mySession !== sessionId) return;
-        scannerStarted = true;
-        setStatus("请把二维码放到框内");
-        return;
-      } catch (e3) {
-        console.log("user camera 启动失败:", e3);
-      }
-
-      // 不再弹 alert，避免非常明显的错误弹窗
-      setStatus("相机暂时启动失败，请退出后重试，或确认 Safari 相机权限已开启。");
-      await stopScannerSilently();
-      await clearScannerSilently();
-      html5QrCode = null;
     }
 
     function onScanFailure(error) {
-      // 连续扫描失败属于正常现象，不处理
+      // 正常现象，不处理
     }
 
     async function onScanSuccess(decodedText) {
-      if (scanHandled) return;
-      scanHandled = true;
+      if (scanLocked) return;
+      scanLocked = true;
 
       const cleanText = String(decodedText || "").trim();
       if (!cleanText) {
-        scanHandled = false;
+        scanLocked = false;
         return;
       }
 
       currentAudioFile = cleanText + ".mp3";
-      console.log("扫码结果:", cleanText, "=>", currentAudioFile);
+      console.log("扫码结果:", currentAudioFile);
 
       // 先切到播放页
       showPlayer();
+
+      // 立刻异步销毁扫码器，避免它继续改页面
+      setTimeout(() => {
+        destroyScanner();
+      }, 0);
 
       try {
         audio.src = encodeURI(currentAudioFile);
         audio.load();
         await audio.play();
       } catch (e) {
-        console.log("自动播放失败，需要手动点击:", e);
+        console.log("自动播放失败:", e);
       }
-
-      // 再静默关相机，绝不弹窗
-      stopScannerSilently();
     }
 
     async function playCurrentAudio() {
@@ -412,8 +386,8 @@
         audio.src = encodeURI(currentAudioFile);
         audio.load();
         await audio.play();
-      } catch (err) {
-        console.log("播放失败:", err);
+      } catch (e) {
+        console.log("播放失败:", e);
       }
     }
 
@@ -424,6 +398,8 @@
 
     async function rescanNext() {
       stopAudio();
+      currentAudioFile = "";
+      scanLocked = false;
       await startScanner();
     }
 
@@ -432,16 +408,6 @@
     replayBtn.addEventListener("click", playCurrentAudio);
     stopBtn.addEventListener("click", stopAudio);
     rescanBtn.addEventListener("click", rescanNext);
-
-    document.addEventListener("visibilitychange", async () => {
-      if (document.hidden) {
-        await stopScannerSilently();
-      }
-    });
-
-    window.addEventListener("pagehide", async () => {
-      await stopScannerSilently();
-    });
   </script>
 </body>
 </html>
