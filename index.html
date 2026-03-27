@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>小班听说游戏机</title>
+    <script src="https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/html5-qrcode/2.2.0/html5-qrcode.min.js"></script>
+    <style>
+        :root { --green: #4CAF50; --orange: #FF9800; --bg: #F9FBE7; }
+        body { font-family: system-ui, -apple-system, sans-serif; background-color: var(--bg); margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
+        
+        /* 启动画面 */
+        #start-screen { text-align: center; }
+        .circle-btn { width: 240px; height: 240px; border-radius: 50%; border: none; color: white; font-size: 30px; font-weight: bold; cursor: pointer; box-shadow: 0 10px 0 #2E7D32; background: var(--green); }
+        
+        /* 扫描画面 */
+        #scan-screen { display: none; width: 100%; text-align: center; }
+        #reader { width: 90vw; max-width: 450px; margin: 0 auto; border: 10px solid white; border-radius: 30px; overflow: hidden; box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+        
+        /* 播放画面 */
+        #play-screen { display: none; text-align: center; }
+        .play-btn { width: 280px; height: 280px; border-radius: 50%; border: none; background: var(--orange); color: white; font-size: 100px; box-shadow: 0 12px 0 #E65100; animation: bounce 1.2s infinite; }
+        
+        .hint { font-size: 24px; color: #333; margin: 20px 0; font-weight: bold; }
+        .retry { margin-top: 30px; color: #666; text-decoration: underline; font-size: 18px; }
+        
+        @keyframes bounce { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+    </style>
+</head>
+<body>
+
+    <div id="start-screen">
+        <button class="circle-btn" onclick="initApp()">点我开始<br>玩游戏</button>
+        <p class="hint">老师帮小朋友点一下哦</p>
+    </div>
+
+    <div id="scan-screen">
+        <div id="reader"></div>
+        <p class="hint">把卡片对准小方框...</p>
+    </div>
+
+    <div id="play-screen">
+        <button class="play-btn" onclick="playCurrent()">▶️</button>
+        <p class="hint" style="color: var(--orange);">找到啦！快点球球</p>
+        <div class="retry" onclick="reset()">换一张卡片</div>
+    </div>
+
+    <audio id="audio-player"></audio>
+
+    <script>
+        const audio = document.getElementById('audio-player');
+        let html5QrCode;
+
+        function initApp() {
+            // 解锁 iOS 音频限制
+            audio.play().catch(() => {}); 
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('scan-screen').style.display = 'block';
+            startScanner();
+        }
+
+        function startScanner() {
+            html5QrCode = new Html5Qrcode("reader");
+            html5QrCode.start(
+                { facingMode: "environment" },
+                { fps: 10, qrbox: 250 },
+                (decodedText) => {
+                    const num = decodedText.trim();
+                    audio.src = num + ".mp3"; // 匹配文件名 1.mp3, 2.mp3...
+                    
+                    document.getElementById('scan-screen').style.display = 'none';
+                    document.getElementById('play-screen').style.display = 'block';
+                    audio.play();
+                }
+            ).catch(err => alert("相机打不开，请确保允许了相机权限。"));
+        }
+
+        function playCurrent() { audio.play(); }
+
+        function reset() {
+            document.getElementById('play-screen').style.display = 'none';
+            document.getElementById('scan-screen').style.display = 'block';
+            // 保持相机运行，无需重新初始化
+        }
+    </script>
+</body>
+</html>
