@@ -1,30 +1,83 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>小班听说游戏</title>
-    <script src="https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/html5-qrcode/2.2.0/html5-qrcode.min.js"></script>
+
+    <!-- 建议用较新的 html5-qrcode -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+
     <style>
-        body { font-family: -apple-system, sans-serif; background-color: #F1F8E9; margin: 0; padding: 20px; text-align: center; }
-        #setup-screen { margin-top: 120px; }
-        .big-btn { 
-            padding: 40px 80px; font-size: 32px; border-radius: 80px; 
-            background: #4CAF50; color: white; border: none; 
-            box-shadow: 0 12px 0 #2E7D32; cursor: pointer;
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
+            background-color: #F1F8E9;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
         }
-        #reader { 
-            width: 100%; max-width: 500px; margin: 0 auto; 
-            border: 15px solid white; border-radius: 40px; 
-            overflow: hidden; display: none; background: #000;
+
+        #setup-screen {
+            margin-top: 120px;
         }
-        #play-btn { 
-            display: none; width: 280px; height: 280px; background: #FF9800; 
-            color: white; border: none; border-radius: 50%; 
-            font-size: 120px; margin: 50px auto; 
+
+        .big-btn {
+            padding: 40px 80px;
+            font-size: 32px;
+            border-radius: 80px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            box-shadow: 0 12px 0 #2E7D32;
+            cursor: pointer;
+        }
+
+        #reader {
+            width: 100%;
+            max-width: 500px;
+            margin: 20px auto 0;
+            border: 15px solid white;
+            border-radius: 40px;
+            overflow: hidden;
+            display: none;
+            background: #000;
+        }
+
+        #play-btn {
+            display: none;
+            width: 280px;
+            height: 280px;
+            background: #FF9800;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            font-size: 120px;
+            margin: 50px auto;
             box-shadow: 0 15px 0 #E65100;
+            cursor: pointer;
         }
-        .status { font-size: 26px; color: #333; margin-top: 30px; font-weight: bold; }
+
+        .status {
+            font-size: 26px;
+            color: #333;
+            margin-top: 30px;
+            font-weight: bold;
+            line-height: 1.5;
+        }
+
+        .small-text {
+            color: #888;
+            margin-top: 30px;
+            font-size: 18px;
+        }
+
+        .link-btn {
+            text-decoration: underline;
+            color: #999;
+            margin-top: 30px;
+            cursor: pointer;
+            font-size: 20px;
+        }
     </style>
 </head>
 <body>
@@ -32,7 +85,7 @@
     <div id="setup-screen">
         <h1 style="color: #2E7D32;">听说游戏开始啦</h1>
         <button class="big-btn" onclick="startApp()">点我开始</button>
-        <p style="color: #888; margin-top: 30px;">(老师请帮小朋友点一下)</p>
+        <p class="small-text">(老师请帮小朋友点一下)</p>
     </div>
 
     <div id="reader"></div>
@@ -41,65 +94,194 @@
     <div id="play-screen" style="display:none;">
         <button id="play-btn" onclick="playAudio()">▶️</button>
         <p class="status" style="color: #FF9800;">找到声音啦！快点球球</p>
-        <p onclick="location.reload()" style="text-decoration:underline; color:#999; margin-top:30px;">换一张卡片</p>
+        <p class="link-btn" onclick="resetGame()">换一张卡片</p>
     </div>
 
-    <audio id="audio-player"></audio>
+    <audio id="audio-player" playsinline webkit-playsinline></audio>
 
     <script>
-        const audio = document.getElementById('audio-player');
-        let html5QrCode;
+        const audio = document.getElementById("audio-player");
+        const setupScreen = document.getElementById("setup-screen");
+        const reader = document.getElementById("reader");
+        const statusText = document.getElementById("status");
+        const playScreen = document.getElementById("play-screen");
+        const playBtn = document.getElementById("play-btn");
+
+        let html5QrCode = null;
+        let scannerStarted = false;
+
+        async function unlockAudio() {
+            // iOS 音频解锁
+            audio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
+            try {
+                await audio.play();
+                audio.pause();
+                audio.currentTime = 0;
+            } catch (e) {
+                console.log("音频解锁失败:", e);
+            }
+        }
+
+        function setStatus(text) {
+            statusText.style.display = "block";
+            statusText.innerText = text;
+        }
 
         async function startApp() {
-            // 解决 iOS 15 音频锁
-            audio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
-            try { await audio.play(); } catch(e) {}
+            try {
+                await unlockAudio();
 
-            document.getElementById('setup-screen').style.display = 'none';
-            document.getElementById('reader').style.display = 'block';
-            document.getElementById('status').innerText = "正在寻找后置镜头...";
+                setupScreen.style.display = "none";
+                playScreen.style.display = "none";
+                reader.style.display = "block";
+                setStatus("正在请求相机权限...");
 
-            if (!html5QrCode) {
-                html5QrCode = new Html5Qrcode("reader");
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    alert("当前浏览器不支持摄像头。请使用 Safari 打开这个网页。");
+                    resetGame();
+                    return;
+                }
+
+                if (!window.isSecureContext) {
+                    alert("当前网页不是安全环境，摄像头无法开启。请确认使用的是 GitHub Pages 的 https 链接。");
+                    resetGame();
+                    return;
+                }
+
+                if (!html5QrCode) {
+                    html5QrCode = new Html5Qrcode("reader");
+                }
+
+                // 先请求一次权限，避免某些 iOS 设备拿不到摄像头 label
+                try {
+                    const tempStream = await navigator.mediaDevices.getUserMedia({
+                        video: true,
+                        audio: false
+                    });
+                    tempStream.getTracks().forEach(track => track.stop());
+                } catch (permErr) {
+                    console.log("相机权限预请求失败:", permErr);
+                }
+
+                setStatus("正在寻找可用摄像头...");
+
+                const devices = await Html5Qrcode.getCameras();
+
+                if (!devices || devices.length === 0) {
+                    alert("没有检测到摄像头。请检查 iPhone/iPad 的相机权限，并尽量使用 Safari 打开。");
+                    resetGame();
+                    return;
+                }
+
+                console.log("可用摄像头:", devices);
+
+                // 优先找后置摄像头
+                let backCamera = devices.find(device =>
+                    /back|rear|environment|后|背面/i.test(device.label)
+                );
+
+                // 如果没找到后置，就默认第一个
+                const cameraId = backCamera ? backCamera.id : devices[0].id;
+
+                const config = {
+                    fps: 10,
+                    qrbox: { width: 250, height: 250 },
+                    aspectRatio: 1.0,
+                    rememberLastUsedCamera: true,
+                    showTorchButtonIfSupported: true,
+                    showZoomSliderIfSupported: true
+                };
+
+                setStatus("正在启动摄像头...");
+
+                await html5QrCode.start(
+                    cameraId,
+                    config,
+                    onScanSuccess,
+                    onScanFailure
+                );
+
+                scannerStarted = true;
+                setStatus("请把二维码放到框内");
+            } catch (err) {
+                console.error("启动摄像头失败:", err);
+
+                let msg = "相机启动失败。";
+
+                if (err && err.name === "NotAllowedError") {
+                    msg += "\n请到系统设置或 Safari 设置中允许相机权限。";
+                } else if (err && err.name === "NotFoundError") {
+                    msg += "\n没有找到可用摄像头。";
+                } else if (err && err.name === "NotReadableError") {
+                    msg += "\n摄像头可能正被其他程序占用。";
+                } else {
+                    msg += "\n请尽量使用 Safari 打开，不要在微信或其他内置浏览器中打开。";
+                }
+
+                alert(msg);
+                resetGame();
             }
+        }
 
-            // 强制要求后置摄像头 (facingMode: environment)
-            const config = { 
-                fps: 10, 
-                qrbox: { width: 250, height: 250 },
-                aspectRatio: 1.0 
-            };
-            
-            // 尝试第一种方式启动：明确要求后置摄像头
-            html5QrCode.start(
-                { facingMode: { exact: "environment" } }, 
-                config, 
-                onScanSuccess
-            ).catch(err => {
-                // 如果 exact 模式失败，尝试普通模式启动
-                console.log("精确寻找失败，尝试普通模式...");
-                html5QrCode.start(
-                    { facingMode: "environment" }, 
-                    config, 
-                    onScanSuccess
-                ).catch(err2 => {
-                    alert("相机启动失败！请确保已在浏览器设置中【允许】相机。");
-                    location.reload();
-                });
+        function onScanFailure(error) {
+            // 扫描过程中频繁失败属于正常现象，这里不弹窗
+            // console.log("scan failure:", error);
+        }
+
+        async function onScanSuccess(decodedText) {
+            try {
+                const fileName = decodedText.trim() + ".mp3";
+                console.log("扫码结果:", decodedText, "=>", fileName);
+
+                if (scannerStarted && html5QrCode) {
+                    await html5QrCode.stop();
+                    scannerStarted = false;
+                }
+
+                reader.style.display = "none";
+                statusText.style.display = "none";
+                playScreen.style.display = "block";
+                playBtn.style.display = "block";
+
+                audio.src = encodeURI(fileName);
+
+                try {
+                    await audio.play();
+                } catch (e) {
+                    console.log("自动播放失败，需要手动点击:", e);
+                }
+            } catch (err) {
+                console.error("扫码成功后处理失败:", err);
+                alert("二维码识别成功，但播放音频失败。请检查 mp3 文件名是否和二维码内容一致。");
+            }
+        }
+
+        function playAudio() {
+            audio.play().catch(err => {
+                console.log("手动播放失败:", err);
+                alert("播放失败，请确认音频文件存在，并且文件名和二维码内容一致。");
             });
         }
 
-        function onScanSuccess(text) {
-            const fileName = text.trim() + ".mp3";
-            audio.src = fileName;
-            document.getElementById('reader').style.display = 'none';
-            document.getElementById('status').style.display = 'none';
-            document.getElementById('play-screen').style.display = 'block';
-            document.getElementById('play-btn').style.display = 'block';
-            audio.play();
-        }
+        async function resetGame() {
+            try {
+                if (scannerStarted && html5QrCode) {
+                    await html5QrCode.stop();
+                    scannerStarted = false;
+                }
+            } catch (e) {
+                console.log("停止扫码器失败:", e);
+            }
 
-        function playAudio() { audio.play(); }
+            audio.pause();
+            audio.currentTime = 0;
+
+            setupScreen.style.display = "block";
+            reader.style.display = "none";
+            playScreen.style.display = "none";
+            statusText.style.display = "none";
+            playBtn.style.display = "none";
+        }
     </script>
 </body>
 </html>
