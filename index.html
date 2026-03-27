@@ -12,7 +12,6 @@
             padding: 40px 80px; font-size: 32px; border-radius: 80px; 
             background: #4CAF50; color: white; border: none; 
             box-shadow: 0 12px 0 #2E7D32; cursor: pointer;
-            -webkit-tap-highlight-color: transparent;
         }
         #reader { 
             width: 100%; max-width: 500px; margin: 0 auto; 
@@ -26,13 +25,12 @@
             box-shadow: 0 15px 0 #E65100;
         }
         .status { font-size: 26px; color: #333; margin-top: 30px; font-weight: bold; }
-        #retry-link { margin-top: 30px; display: none; color: #666; text-decoration: underline; font-size: 20px; }
     </style>
 </head>
 <body>
 
     <div id="setup-screen">
-        <h1 style="color: #2E7D32;">准备好了吗？</h1>
+        <h1 style="color: #2E7D32;">听说游戏开始啦</h1>
         <button class="big-btn" onclick="startApp()">点我开始</button>
         <p style="color: #888; margin-top: 30px;">(老师请帮小朋友点一下)</p>
     </div>
@@ -42,8 +40,8 @@
 
     <div id="play-screen" style="display:none;">
         <button id="play-btn" onclick="playAudio()">▶️</button>
-        <p class="status" style="color: #FF9800;">找到啦！快点球球</p>
-        <div id="retry-link" onclick="resetScanner()">换一张卡片</div>
+        <p class="status" style="color: #FF9800;">找到声音啦！快点球球</p>
+        <p onclick="location.reload()" style="text-decoration:underline; color:#999; margin-top:30px;">换一张卡片</p>
     </div>
 
     <audio id="audio-player"></audio>
@@ -53,56 +51,55 @@
         let html5QrCode;
 
         async function startApp() {
-            // 1. 立即激活音频（解决 iOS 禁音）
+            // 解决 iOS 15 音频锁
             audio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
             try { await audio.play(); } catch(e) {}
 
             document.getElementById('setup-screen').style.display = 'none';
             document.getElementById('reader').style.display = 'block';
-            document.getElementById('status').innerText = "正在唤醒摄像头...";
+            document.getElementById('status').innerText = "正在寻找后置镜头...";
 
-            // 2. 启动相机
             if (!html5QrCode) {
                 html5QrCode = new Html5Qrcode("reader");
             }
 
-            // 针对旧版 iPad 优化的参数
+            // 强制要求后置摄像头 (facingMode: environment)
             const config = { 
                 fps: 10, 
                 qrbox: { width: 250, height: 250 },
-                aspectRatio: 1.0
+                aspectRatio: 1.0 
             };
             
+            // 尝试第一种方式启动：明确要求后置摄像头
             html5QrCode.start(
-                { facingMode: "environment" }, 
+                { facingMode: { exact: "environment" } }, 
                 config, 
-                (text) => {
-                    // 扫码成功
-                    const fileName = text.trim() + ".mp3";
-                    audio.src = fileName;
-                    
-                    document.getElementById('reader').style.display = 'none';
-                    document.getElementById('status').style.display = 'none';
-                    document.getElementById('play-screen').style.display = 'block';
-                    document.getElementById('play-btn').style.display = 'block';
-                    document.getElementById('retry-link').style.display = 'block';
-                    
-                    audio.play().catch(e => console.log("等待手动播放"));
-                }
+                onScanSuccess
             ).catch(err => {
-                alert("相机打不开！\n请点击地址栏左边的'大小'按钮，进入'网站设置'，将相机改为'允许'。");
-                location.reload(); 
+                // 如果 exact 模式失败，尝试普通模式启动
+                console.log("精确寻找失败，尝试普通模式...");
+                html5QrCode.start(
+                    { facingMode: "environment" }, 
+                    config, 
+                    onScanSuccess
+                ).catch(err2 => {
+                    alert("相机启动失败！请确保已在浏览器设置中【允许】相机。");
+                    location.reload();
+                });
             });
         }
 
-        function playAudio() { audio.play(); }
-
-        function resetScanner() {
-            document.getElementById('play-screen').style.display = 'none';
-            document.getElementById('reader').style.display = 'block';
-            document.getElementById('status').style.display = 'block';
-            document.getElementById('status').innerText = "请把卡片放到框框里...";
+        function onScanSuccess(text) {
+            const fileName = text.trim() + ".mp3";
+            audio.src = fileName;
+            document.getElementById('reader').style.display = 'none';
+            document.getElementById('status').style.display = 'none';
+            document.getElementById('play-screen').style.display = 'block';
+            document.getElementById('play-btn').style.display = 'block';
+            audio.play();
         }
+
+        function playAudio() { audio.play(); }
     </script>
 </body>
 </html>
