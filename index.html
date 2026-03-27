@@ -32,6 +32,10 @@
             -webkit-tap-highlight-color: transparent;
         }
 
+        #scanner-screen {
+            display: none;
+        }
+
         #reader {
             width: 100%;
             max-width: 500px;
@@ -39,7 +43,6 @@
             border: 15px solid white;
             border-radius: 40px;
             overflow: hidden;
-            display: none;
             background: #000;
             min-height: 300px;
         }
@@ -119,8 +122,10 @@
         <p class="small-text">(老师请帮小朋友点一下)</p>
     </div>
 
-    <div id="reader"></div>
-    <div id="status" class="status"></div>
+    <div id="scanner-screen">
+        <div id="reader"></div>
+        <div id="status" class="status"></div>
+    </div>
 
     <div id="play-screen">
         <button id="play-btn" onclick="playAudio()">▶️</button>
@@ -141,6 +146,7 @@
     <script>
         const audio = document.getElementById("audio-player");
         const setupScreen = document.getElementById("setup-screen");
+        const scannerScreen = document.getElementById("scanner-screen");
         const reader = document.getElementById("reader");
         const statusText = document.getElementById("status");
         const playScreen = document.getElementById("play-screen");
@@ -150,6 +156,8 @@
         let scannerStarted = false;
         let scanHandled = false;
         let currentAudioFile = "";
+        let scanSessionId = 0;
+        let appState = "home"; // home | scanning | playing
 
         async function unlockAudio() {
             audio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
@@ -163,37 +171,56 @@
         }
 
         function setStatus(text) {
-            statusText.style.display = "block";
             statusText.innerText = text || "";
         }
 
         function showScannerUI() {
+            appState = "scanning";
             setupScreen.style.display = "none";
             playScreen.style.display = "none";
-            reader.style.display = "block";
-            statusText.style.display = "block";
+            scannerScreen.style.display = "block";
         }
 
         function showPlayerUI() {
+            appState = "playing";
             setupScreen.style.display = "none";
-            reader.style.display = "none";
-            statusText.style.display = "none";
+            scannerScreen.style.display = "none";
             playScreen.style.display = "block";
             playBtn.style.display = "inline-block";
         }
 
-        async function stopScannerSilently() {
-            if (scannerStarted && html5QrCode) {
+        function showHomeUI() {
+            appState = "home";
+            setupScreen.style.display = "block";
+            scannerScreen.style.display = "none";
+            playScreen.style.display = "none";
+            setStatus("");
+        }
+
+        async function stopAndDestroyScannerSilently() {
+            const scanner = html5QrCode;
+            html5QrCode = null;
+
+            if (scanner) {
                 try {
-                    await html5QrCode.stop();
+                    await scanner.stop();
                 } catch (e) {
                     console.log("停止扫码器失败，已忽略:", e);
                 }
+
+                try {
+                    await scanner.clear();
+                } catch (e) {
+                    console.log("清理扫码器失败，已忽略:", e);
+                }
             }
+
             scannerStarted = false;
+            reader.innerHTML = "";
         }
 
         async function startApp() {
+            const mySessionId = ++scanSessionId;
             scanHandled = false;
             currentAudioFile = "";
 
@@ -215,9 +242,9 @@
                     return;
                 }
 
-                if (!html5QrCode) {
-                    html5QrCode = new Html5Qrcode("reader");
-                }
+                await stopAndDestroyScannerSilently();
+
+                html5QrCode = new Html5Qrcode("reader");
 
                 try {
                     const tempStream = await navigator.mediaDevices.getUserMedia({
@@ -229,9 +256,13 @@
                     console.log("相机权限预请求失败:", permErr);
                 }
 
+                if (mySessionId !== scanSessionId) return;
+
                 setStatus("正在寻找可用摄像头...");
 
                 const devices = await Html5Qrcode.getCameras();
+
+                if (mySessionId !== scanSessionId) return;
 
                 if (!devices || devices.length === 0) {
                     alert("没有检测到摄像头。请检查 iPhone/iPad 的相机权限，并尽量使用 Safari 打开。");
@@ -259,17 +290,19 @@
                 await html5QrCode.start(
                     cameraId,
                     config,
-                    onScanSuccess,
+                    (decodedText) => onScanSuccess(decodedText, mySessionId),
                     onScanFailure
                 );
+
+                if (mySessionId !== scanSessionId) return;
 
                 scannerStarted = true;
                 setStatus("请把二维码放到框内");
             } catch (err) {
                 console.error("启动摄像头失败:", err);
 
-                if (scanHandled) {
-                    console.log("已成功扫码，忽略后续相机异常");
+                if (scanHandled || appState === "playing") {
+                    console.log("已进入播放页，忽略后续相机异常");
                     return;
                 }
 
@@ -294,16 +327,22 @@
             // 正常现象，不弹窗
         }
 
-        async function onScanSuccess(decodedText) {
+        async function onScanSuccess(decodedText, mySessionId) {
+            if (mySessionId !== scanSessionId) return;
             if (scanHandled) return;
+            if (appState !== "scanning") return;
+
             scanHandled = true;
 
             try {
-                const fileName = decodedText.trim() + ".mp3";
+                const fileName = String(decodedText || "").trim() + ".mp3";
                 currentAudioFile = fileName;
                 console.log("扫码结果:", decodedText, "=>", fileName);
 
-                // 先显示播放页，再静默关相机
+                // 先作废当前扫描会话，防止旧实例继续回调
+                scanSessionId++;
+
+                // 先切到播放页
                 showPlayerUI();
 
                 audio.src = encodeURI(fileName);
@@ -315,7 +354,10 @@
                     console.log("自动播放失败，需要手动点击:", e);
                 }
 
-                stopScannerSilently();
+                // 再后台彻底销毁扫码器
+                setTimeout(() => {
+                    stopAndDestroyScannerSilently();
+                }, 0);
             } catch (err) {
                 console.error("扫码成功后处理失败:", err);
                 alert("二维码识别成功，但播放音频失败。请检查 mp3 文件名是否和二维码内容一致。");
@@ -342,7 +384,6 @@
             stopAudio();
             scanHandled = false;
             currentAudioFile = "";
-            await stopScannerSilently();
             await startApp();
         }
 
@@ -350,17 +391,15 @@
             scanHandled = false;
             currentAudioFile = "";
 
-            await stopScannerSilently();
+            await stopAndDestroyScannerSilently();
 
             audio.pause();
             audio.currentTime = 0;
 
-            setupScreen.style.display = "block";
-            reader.style.display = "none";
-            playScreen.style.display = "none";
-            statusText.style.display = "none";
-            playBtn.style.display = "none";
+            showHomeUI();
         }
+
+        showHomeUI();
     </script>
 </body>
 </html>
