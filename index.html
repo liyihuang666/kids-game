@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>小班听说游戏 | 连续扫码播放</title>
+    <title>小班听说游戏 | 流畅音频版</title>
     <script src="https://unpkg.com/html5-qrcode@2.3.8"></script>
     <style>
         * {
@@ -21,7 +21,6 @@
             position: relative;
         }
 
-        /* 通用容器 */
         .screen {
             transition: opacity 0.2s ease;
         }
@@ -188,6 +187,16 @@
             color: #ffe0b5;
             margin-top: 20px;
         }
+        .audio-loading {
+            font-size: 20px;
+            color: #FF9800;
+            margin-top: 8px;
+            font-weight: normal;
+            background: rgba(255,152,0,0.2);
+            display: inline-block;
+            padding: 4px 16px;
+            border-radius: 40px;
+        }
         @media (max-width: 550px) {
             .big-btn { padding: 20px 44px; font-size: 28px; }
             #play-btn { width: 180px; height: 180px; font-size: 72px; }
@@ -216,6 +225,7 @@
 <div id="play-screen" class="screen">
     <button id="play-btn">🔊</button>
     <p class="status" style="color:#EF6C00;">✨ 找到声音啦！点大球听故事 ✨</p>
+    <div id="audio-loading-status" class="audio-loading" style="display: none;">⏳ 音频加载中，请稍后...</div>
     <div class="action-row">
         <button class="action-btn orange-btn" id="replay-btn">🔁 再听一次</button>
         <button class="action-btn green-btn" id="rescan-new-btn">📷 再扫一个</button>
@@ -242,13 +252,16 @@
     const stopAudioBtn = document.getElementById("stop-audio-btn");
     const startBtn = document.getElementById("start-btn");
     const manualHomeBtn = document.getElementById("manual-home-btn");
+    const audioLoadingDiv = document.getElementById("audio-loading-status");
 
     // ---------- 全局变量 ----------
-    let html5QrCode = null;          // 扫码实例
-    let isScanning = false;          // 扫码器是否正在运行
-    let isProcessing = false;         // 防止重复扫码/切换中
-    let currentAudioFile = "";        // 当前音频文件名
-    let lastScannedCode = "";          // 避免重复相同码
+    let html5QrCode = null;
+    let isScanning = false;
+    let isProcessing = false;
+    let currentAudioFile = "";
+    let lastScannedCode = "";
+    let currentLoadingTimeout = null;
+    let playPromise = null;          // 跟踪当前播放Promise
 
     // ---------- 辅助函数 ----------
     function setScannerStatus(msg, isError = false) {
@@ -258,6 +271,145 @@
         }
     }
 
+    // 显示加载中状态
+    function showAudioLoading(show) {
+        if (show) {
+            if (currentLoadingTimeout) clearTimeout(currentLoadingTimeout);
+            audioLoadingDiv.style.display = "inline-block";
+            audioLoadingDiv.innerText = "⏳ 音频加载中，请稍后...";
+        } else {
+            audioLoadingDiv.style.display = "none";
+        }
+    }
+
+    // 播放音频核心函数：确保预加载完毕再播放，避免卡顿
+    async function playAudioWithBuffer(url, retryCount = 0) {
+        return new Promise((resolve, reject) => {
+            if (!url) {
+                reject("无音频地址");
+                return;
+            }
+            
+            // 停止当前播放并清理之前的加载事件
+            if (audioPlayer.src !== url) {
+                audioPlayer.pause();
+                audioPlayer.removeAttribute('src');
+                audioPlayer.load();
+            }
+            
+            audioPlayer.src = url;
+            audioPlayer.load();
+            
+            let loaded = false;
+            let timeoutId = null;
+            
+            const cleanup = () => {
+                if (timeoutId) clearTimeout(timeoutId);
+                audioPlayer.removeEventListener('canplaythrough', onCanPlay);
+                audioPlayer.removeEventListener('error', onError);
+                audioPlayer.removeEventListener('stalled', onStalled);
+            };
+            
+            const onCanPlay = () => {
+                if (loaded) return;
+                loaded = true;
+                cleanup();
+                // 确保可以播放
+                const playAttempt = audioPlayer.play();
+                if (playAttempt !== undefined) {
+                    playAttempt.then(() => {
+                        resolve();
+                    }).catch(err => {
+                        console.warn("自动播放被拦截，但用户可手动点击", err);
+                        // 不reject，因为用户还可以点击大按钮
+                        resolve(); // 依然resolve，表示加载完成但播放需要手势
+                    });
+                } else {
+                    resolve();
+                }
+            };
+            
+            const onError = (e) => {
+                if (loaded) return;
+                cleanup();
+                console.error("音频加载错误", e);
+                // 尝试重试一次（网络波动）
+                if (retryCount < 1) {
+                    console.log(`重试加载音频: ${url}`);
+                    setTimeout(() => {
+                        playAudioWithBuffer(url, retryCount + 1).then(resolve).catch(reject);
+                    }, 300);
+                } else {
+                    reject(new Error("音频文件加载失败，请检查网络或文件是否存在"));
+                }
+            };
+            
+            const onStalled = () => {
+                // 网络卡住，可以尝试重试
+                if (!loaded && retryCount < 1) {
+                    console.log("音频加载停滞，尝试重新加载");
+                    cleanup();
+                    setTimeout(() => {
+                        playAudioWithBuffer(url, retryCount + 1).then(resolve).catch(reject);
+                    }, 500);
+                }
+            };
+            
+            audioPlayer.addEventListener('canplaythrough', onCanPlay);
+            audioPlayer.addEventListener('error', onError);
+            audioPlayer.addEventListener('stalled', onStalled);
+            
+            // 设置超时（5秒），避免无限等待
+            timeoutId = setTimeout(() => {
+                if (!loaded) {
+                    cleanup();
+                    reject(new Error("音频加载超时，请检查网络"));
+                }
+            }, 8000);
+        });
+    }
+    
+    // 外部调用播放（带UI反馈）
+    async function playCurrentAudio() {
+        if (!currentAudioFile) {
+            console.warn("没有当前音频文件");
+            return false;
+        }
+        
+        // 显示加载状态
+        showAudioLoading(true);
+        
+        // 如果已经有播放Promise在进行，先取消（但无法真正取消，仅标记）
+        if (playPromise) {
+            try {
+                // 不直接中断，只是等待之前的结束
+                await playPromise.catch(()=>{});
+            } catch(e) {}
+        }
+        
+        const audioUrl = encodeURI(currentAudioFile);
+        try {
+            await playAudioWithBuffer(audioUrl);
+            showAudioLoading(false);
+            return true;
+        } catch (err) {
+            console.error("播放失败:", err);
+            showAudioLoading(false);
+            alert("音频播放失败，请检查网络或音频文件是否存在。\n文件名：" + currentAudioFile);
+            return false;
+        }
+    }
+    
+    // 停止播放
+    function stopAudio() {
+        if (playPromise) {
+            // 不取消promise，只是暂停音频
+        }
+        audioPlayer.pause();
+        audioPlayer.currentTime = 0;
+        showAudioLoading(false);
+    }
+    
     // 彻底停止并销毁扫码器，释放相机资源
     async function destroyScanner() {
         if (html5QrCode && isScanning) {
@@ -268,15 +420,13 @@
             }
             isScanning = false;
         }
-        // 移除旧实例, 下次会重新创建
         if (html5QrCode) {
-            // 清理DOM中的video元素（html5-qrcode内部会自动清理，但保险）
             try {
                 if (html5QrCode.isScanning) await html5QrCode.stop();
             } catch(e) {}
             html5QrCode = null;
         }
-        // 额外释放所有视频轨道（冗余安全）
+        // 释放所有视频轨道
         if (window.stream && window.stream.getTracks) {
             window.stream.getTracks().forEach(track => {
                 if (track.readyState === 'live' && track.kind === 'video') {
@@ -285,7 +435,6 @@
             });
             window.stream = null;
         }
-        // 查找页面上可能残留的视频元素并移除（清理干净）
         const videos = document.querySelectorAll("#reader video");
         videos.forEach(video => {
             if (video.srcObject) {
@@ -295,44 +444,36 @@
             }
         });
     }
-
-    // 重置所有界面到首页（彻底恢复）
+    
+    // 重置所有界面到首页
     async function fullResetToHome() {
         if (isProcessing) return;
         isProcessing = true;
-        // 停止所有音频
-        audioPlayer.pause();
-        audioPlayer.currentTime = 0;
+        stopAudio();
         currentAudioFile = "";
         lastScannedCode = "";
-        // 销毁扫码器
         await destroyScanner();
-        // 隐藏所有功能屏，显示首页
         setupScreen.style.display = "flex";
         scannerScreen.style.display = "none";
         playScreen.style.display = "none";
         isProcessing = false;
     }
-
+    
     // 显示扫码界面并启动相机（全新启动）
     async function showAndStartScanner() {
-        // 防止重复进入
         if (isProcessing) {
             console.log("正在处理中，稍后再试");
             return false;
         }
         isProcessing = true;
-
-        // 1. 先彻底清理旧的扫码器
+        
         await destroyScanner();
         
-        // 2. 隐藏其他屏，显示扫码屏
         setupScreen.style.display = "none";
         playScreen.style.display = "none";
         scannerScreen.style.display = "block";
         setScannerStatus("🔐 请求相机权限...");
-
-        // 3. 检查环境
+        
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             alert("当前浏览器不支持摄像头。请使用 Safari 或 系统浏览器打开。");
             await fullResetToHome();
@@ -345,19 +486,16 @@
             isProcessing = false;
             return false;
         }
-
-        // 4. 预检查权限（用户体验）
+        
         try {
             const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
             tempStream.getTracks().forEach(t => t.stop());
         } catch (permErr) {
             console.warn("预授权失败", permErr);
-            // 继续尝试，但系统会弹出授权框
         }
-
+        
         setScannerStatus("📷 寻找摄像头...");
         try {
-            // 获取摄像头列表
             const devices = await Html5Qrcode.getCameras();
             if (!devices || devices.length === 0) {
                 alert("未检测到摄像头，请检查权限或在 Safari 中开启相机。");
@@ -365,13 +503,11 @@
                 isProcessing = false;
                 return false;
             }
-            // 优先后置摄像头
             let backCam = devices.find(device => 
                 /back|rear|environment|后置|背面/i.test(device.label)
             );
             const cameraId = backCam ? backCam.id : devices[0].id;
-
-            // 新建实例
+            
             html5QrCode = new Html5Qrcode("reader");
             const config = {
                 fps: 12,
@@ -381,17 +517,14 @@
                 showZoomSliderIfSupported: true,
                 rememberLastUsedCamera: true
             };
-
+            
             setScannerStatus("🚀 启动相机中...");
             await html5QrCode.start(
                 cameraId,
                 config,
                 (decodedText) => onScanSuccess(decodedText),
                 (errorMsg) => {
-                    // 扫描失败是正常的，不显示错误提示，避免干扰
-                    if (errorMsg && errorMsg.includes("No MultiFormat Readers")) {
-                        // 静默处理
-                    }
+                    // 静默失败
                 }
             );
             isScanning = true;
@@ -416,103 +549,86 @@
             return false;
         }
     }
-
+    
     // 扫码成功后的处理（播放界面，停止相机）
     async function onScanSuccess(decodedText) {
-        // 防止重复扫码、界面切换中触发多次
         if (isProcessing) {
             console.log("已有操作进行中，忽略本次扫码");
             return;
         }
-        // 避免连续扫到同一个码重复触发
         if (lastScannedCode === decodedText && currentAudioFile !== "") {
             console.log("相同二维码已处理过，不重复触发");
             return;
         }
         
         isProcessing = true;
-        // 记录最后扫描的内容
         lastScannedCode = decodedText;
         const fileName = (decodedText || "").trim() + ".mp3";
         currentAudioFile = fileName;
         console.log(`扫码成功: ${decodedText} -> 音频: ${fileName}`);
         
-        // 重要: 停止扫码器并且隐藏相机画面，避免残留卡住
+        // 停止相机并隐藏扫码界面
         if (html5QrCode && isScanning) {
             try {
                 await html5QrCode.stop();
             } catch(e) { console.warn("停止相机失败", e); }
             isScanning = false;
         }
-        // 强制隐藏扫码界面（确保播放界面独占）
         scannerScreen.style.display = "none";
-        
-        // 显示播放界面
         playScreen.style.display = "flex";
         
-        // 设置音频并尝试自动播放
-        audioPlayer.src = encodeURI(fileName);
-        audioPlayer.load();
+        // 显示加载状态
+        showAudioLoading(true);
         
-        // 自动播放（iOS需要用户之前有过交互，开始页按钮已解锁，再扫一个也有用户点击，所以可以自动）
-        const playPromise = audioPlayer.play();
-        if (playPromise !== undefined) {
-            playPromise.catch(e => {
-                console.log("自动播放被阻止，请手动点击大按钮:", e);
-                // 不弹窗，用户可点按钮播放
-            });
+        // 预加载并自动播放音频
+        const audioUrl = encodeURI(fileName);
+        try {
+            await playAudioWithBuffer(audioUrl, 0);
+            showAudioLoading(false);
+        } catch (err) {
+            console.error("自动播放失败:", err);
+            showAudioLoading(false);
+            // 不弹alert，让用户可以手动点击重试，但提示一下加载失败
+            const statusMsg = document.querySelector("#play-screen .status");
+            if (statusMsg) {
+                const originalText = statusMsg.innerText;
+                statusMsg.innerText = "⚠️ 音频加载失败，请点大球重试";
+                setTimeout(() => {
+                    if (statusMsg.innerText === "⚠️ 音频加载失败，请点大球重试") {
+                        statusMsg.innerText = originalText;
+                    }
+                }, 3000);
+            }
         }
         
         isProcessing = false;
     }
-
-    // 播放音频（手动）
-    function playAudio() {
+    
+    // 手动播放（带加载反馈）
+    async function handleManualPlay() {
         if (!currentAudioFile) {
-            console.warn("无音频文件可播放");
+            alert("请先扫描二维码");
             return;
         }
-        // 如果当前src不对，重新加载
-        if (!audioPlayer.src || !audioPlayer.src.endsWith(encodeURI(currentAudioFile))) {
-            audioPlayer.src = encodeURI(currentAudioFile);
-            audioPlayer.load();
-        }
-        audioPlayer.play().catch(err => {
-            console.error("播放失败:", err);
-            alert("播放失败，请确认音频文件存在，且文件名与二维码内容一致。\n文件名：" + currentAudioFile);
-        });
+        await playCurrentAudio();
     }
     
-    function stopAudio() {
-        audioPlayer.pause();
-        audioPlayer.currentTime = 0;
-    }
-    
-    // 再扫一个：完全重启扫码流程 (核心修复点)
+    // 再扫一个：完全重启扫码流程
     async function rescanCard() {
         if (isProcessing) {
             console.log("正在处理切换，请稍后");
             return;
         }
-        // 停止当前播放的音频
         stopAudio();
-        // 清空当前音频标记，重置重复标记 (允许扫同一个再次重新播放)
         currentAudioFile = "";
-        // 注意不清除 lastScannedCode，但为了严谨允许重新扫相同卡片时重新触发，重置一下
-        // 但为了让同一张卡再次扫能再次播放，需要清空 lastScannedCode 避免 onScanSuccess 被拦截
         lastScannedCode = "";
-        
-        // 1. 隐藏播放界面
         playScreen.style.display = "none";
-        // 2. 彻底销毁扫码器（释放相机资源）
         await destroyScanner();
-        // 3. 重新启动相机和扫码界面
         await showAndStartScanner();
     }
     
-    // 主动解锁音频上下文（iOS WebAudio 限制）
+    // 解锁音频上下文（iOS 等）
     async function unlockAudioContext() {
-        // 使用一个极短 silent wav 来激活 audio 元素
         audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
         try {
             await audioPlayer.play();
@@ -524,61 +640,44 @@
         }
     }
     
-    // 页面初始化 + 事件绑定
+    // 事件绑定
     async function initEventListeners() {
-        // 开始游戏（点击主按钮）
         startBtn.onclick = async () => {
-            // 先解锁音频 (用户手势)
             await unlockAudioContext();
-            // 启动扫码流程
             await showAndStartScanner();
         };
         
-        // 再扫一个（播放界面按钮）
         rescanNewBtn.onclick = async () => {
             await rescanCard();
         };
         
-        // 再听一次
-        replayBtn.onclick = () => {
-            playAudio();
+        replayBtn.onclick = async () => {
+            await handleManualPlay();
         };
         
-        // 停止播放
         stopAudioBtn.onclick = () => {
             stopAudio();
         };
         
-        // 大播放按钮
-        playBtn.onclick = () => {
-            playAudio();
+        playBtn.onclick = async () => {
+            await handleManualPlay();
         };
         
-        // 手动返回首页（任何卡住时救急）
         manualHomeBtn.onclick = async () => {
             await fullResetToHome();
         };
-        
-        // 额外: 如果扫码界面点击返回首页按钮同样重置
-        // 避免相机启动失败后无法操作
-        const homeFromScanner = document.getElementById("manual-home-btn");
-        if(homeFromScanner) {
-            // 上面已经绑定 manualHomeBtn， 同一个按钮，已有效
-        }
     }
     
-    // 页面启动后，展示首页， 确保所有功能干净
+    // 页面启动
     (function bootstrap() {
-        // 初始化界面：仅显示首页
         setupScreen.style.display = "flex";
         scannerScreen.style.display = "none";
         playScreen.style.display = "none";
         initEventListeners();
-        // 预置安全销毁任何可能遗留的扫码器
         if (html5QrCode) {
             destroyScanner().catch(e=>console.log);
         }
-        // 给整个页面增加一个触摸解锁保险（防止音频策略过严）
+        // 全局触摸解锁
         const globalUnlock = async () => {
             await unlockAudioContext();
             document.body.removeEventListener("touchstart", globalUnlock);
@@ -589,17 +688,15 @@
         console.log("游戏已准备，点击「点我开始」使用相机");
     })();
     
-    // 增强：当页面隐藏时停止相机，节省资源（可选）
+    // 页面可见性处理：后台时停止相机，回来时若扫码界面可见则重启
     document.addEventListener("visibilitychange", async () => {
         if (document.hidden && isScanning && html5QrCode) {
-            // 页面后台时停止相机，但保留实例标记
             try {
                 await html5QrCode.stop();
                 isScanning = false;
                 console.log("页面后台，相机已暂停");
             } catch(e) {}
         } else if (!document.hidden && scannerScreen.style.display === "block" && !isScanning && html5QrCode) {
-            // 回到前台且扫码界面显示但相机未启动，尝试重启
             if (html5QrCode && !isScanning) {
                 try {
                     const devices = await Html5Qrcode.getCameras();
@@ -617,18 +714,11 @@
         }
     });
     
-    // 补丁：如果用户点击再扫一个时，由于某些异常相机未成功启动，手动调用重新扫描
-    window.rescanFallback = async function() {
-        if (scannerScreen.style.display === "block" && (!isScanning || !html5QrCode)) {
-            console.log("检测到扫码界面但相机未运行，尝试重启");
-            await destroyScanner();
-            await showAndStartScanner();
-        }
-    };
-    // 每3秒检查一次（仅在扫码界面显示时做轻量检查，不干扰性能）
+    // 兜底：扫码界面显示但相机未启动时尝试重启
     setInterval(() => {
         if (scannerScreen.style.display === "block" && !isProcessing && (!isScanning || !html5QrCode)) {
-            window.rescanFallback();
+            console.log("检测到扫码界面但相机未运行，尝试重启");
+            showAndStartScanner().catch(e=>console.warn);
         }
     }, 4000);
 </script>
