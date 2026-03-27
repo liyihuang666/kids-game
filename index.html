@@ -12,7 +12,7 @@
             padding: 40px 80px; font-size: 32px; border-radius: 80px; 
             background: #4CAF50; color: white; border: none; 
             box-shadow: 0 12px 0 #2E7D32; cursor: pointer;
-            -webkit-appearance: none; /* 解决 iOS 按钮默认样式 */
+            -webkit-tap-highlight-color: transparent;
         }
         #reader { 
             width: 100%; max-width: 500px; margin: 0 auto; 
@@ -26,59 +26,83 @@
             box-shadow: 0 15px 0 #E65100;
         }
         .status { font-size: 26px; color: #333; margin-top: 30px; font-weight: bold; }
+        #retry-link { margin-top: 30px; display: none; color: #666; text-decoration: underline; font-size: 20px; }
     </style>
 </head>
 <body>
 
     <div id="setup-screen">
-        <button class="big-btn" onclick="startNow()">点我开始</button>
-        <p style="color: #666; margin-top: 30px;">(点一下，开启相机哦)</p>
+        <h1 style="color: #2E7D32;">准备好了吗？</h1>
+        <button class="big-btn" onclick="startApp()">点我开始</button>
+        <p style="color: #888; margin-top: 30px;">(老师请帮小朋友点一下)</p>
     </div>
 
     <div id="reader"></div>
     <div id="status" class="status"></div>
-    <button id="play-btn" onclick="playAudio()">▶️</button>
 
-    <audio id="audio-player" preload="auto"></audio>
+    <div id="play-screen" style="display:none;">
+        <button id="play-btn" onclick="playAudio()">▶️</button>
+        <p class="status" style="color: #FF9800;">找到啦！快点球球</p>
+        <div id="retry-link" onclick="resetScanner()">换一张卡片</div>
+    </div>
+
+    <audio id="audio-player"></audio>
 
     <script>
         const audio = document.getElementById('audio-player');
         let html5QrCode;
 
-        // 核心：点击按钮立即触发相机请求
-        async function startNow() {
-            // 1. 立即激活音频权限（iOS 必须由点击触发）
+        async function startApp() {
+            // 1. 立即激活音频（解决 iOS 禁音）
             audio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
             try { await audio.play(); } catch(e) {}
 
             document.getElementById('setup-screen').style.display = 'none';
             document.getElementById('reader').style.display = 'block';
-            document.getElementById('status').innerText = "正在打开相机...";
+            document.getElementById('status').innerText = "正在唤醒摄像头...";
 
             // 2. 启动相机
             if (!html5QrCode) {
                 html5QrCode = new Html5Qrcode("reader");
             }
 
-            const config = { fps: 10, qrbox: { width: 280, height: 280 } };
+            // 针对旧版 iPad 优化的参数
+            const config = { 
+                fps: 10, 
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0
+            };
             
-            html5QrCode.start({ facingMode: "environment" }, config, (text) => {
-                // 扫码成功
-                const fileName = text.trim() + ".mp3";
-                audio.src = fileName;
-                
-                document.getElementById('reader').style.display = 'none';
-                document.getElementById('play-btn').style.display = 'block';
-                document.getElementById('status').innerText = "找到声音啦！点点球";
-                audio.play();
-            }).catch(err => {
-                alert("相机启动失败：\n1. 请确认点过'允许'\n2. 检查地址栏左侧是否有禁用相机的标志");
-                console.error(err);
-                location.reload(); // 失败则尝试重载
+            html5QrCode.start(
+                { facingMode: "environment" }, 
+                config, 
+                (text) => {
+                    // 扫码成功
+                    const fileName = text.trim() + ".mp3";
+                    audio.src = fileName;
+                    
+                    document.getElementById('reader').style.display = 'none';
+                    document.getElementById('status').style.display = 'none';
+                    document.getElementById('play-screen').style.display = 'block';
+                    document.getElementById('play-btn').style.display = 'block';
+                    document.getElementById('retry-link').style.display = 'block';
+                    
+                    audio.play().catch(e => console.log("等待手动播放"));
+                }
+            ).catch(err => {
+                alert("相机打不开！\n请点击地址栏左边的'大小'按钮，进入'网站设置'，将相机改为'允许'。");
+                location.reload(); 
             });
         }
 
         function playAudio() { audio.play(); }
+
+        function resetScanner() {
+            document.getElementById('play-screen').style.display = 'none';
+            document.getElementById('reader').style.display = 'block';
+            document.getElementById('status').style.display = 'block';
+            document.getElementById('status').innerText = "请把卡片放到框框里...";
+        }
     </script>
 </body>
 </html>
