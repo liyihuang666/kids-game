@@ -144,7 +144,6 @@
   </style>
 </head>
 <body>
-
   <div id="setup-screen">
     <h1>听说游戏开始啦</h1>
     <button class="big-btn" id="start-btn">点我开始</button>
@@ -177,9 +176,9 @@
     const audio = document.getElementById("audio-player");
     const setupScreen = document.getElementById("setup-screen");
     const scannerScreen = document.getElementById("scanner-screen");
-    const reader = document.getElementById("reader");
-    const statusText = document.getElementById("status");
     const playScreen = document.getElementById("play-screen");
+    const statusText = document.getElementById("status");
+    const reader = document.getElementById("reader");
 
     const startBtn = document.getElementById("start-btn");
     const playBtn = document.getElementById("play-btn");
@@ -191,6 +190,7 @@
     let scannerStarted = false;
     let scanHandled = false;
     let currentAudioFile = "";
+    let sessionId = 0;
 
     function setStatus(text) {
       statusText.innerText = text || "";
@@ -256,28 +256,34 @@
       }
     }
 
-    async function createScanner() {
-      if (!html5QrCode) {
-        html5QrCode = new Html5Qrcode("reader", {
-          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-          verbose: false
-        });
-      }
+    async function rebuildScanner() {
+      await stopScannerSilently();
+      await clearScannerSilently();
+      html5QrCode = null;
+      reader.innerHTML = "";
+
+      html5QrCode = new Html5Qrcode("reader", {
+        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+        verbose: false
+      });
     }
 
     async function startScanner() {
+      const mySession = ++sessionId;
       scanHandled = false;
+      currentAudioFile = "";
+
       audio.pause();
       audio.currentTime = 0;
 
       if (!window.isSecureContext) {
-        alert("当前网页不是安全环境，请确认你打开的是 GitHub Pages 的 https 链接。");
+        setStatus("请使用 GitHub Pages 的 https 链接打开。");
         showHome();
         return;
       }
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        alert("当前浏览器不支持摄像头，请尽量使用 Safari 打开。");
+        setStatus("当前浏览器不支持相机，请尽量使用 Safari。");
         showHome();
         return;
       }
@@ -286,11 +292,7 @@
       showScanner();
       setStatus("正在请求相机权限...");
 
-      await stopScannerSilently();
-      await clearScannerSilently();
-      html5QrCode = null;
-      reader.innerHTML = "";
-      await createScanner();
+      await rebuildScanner();
 
       try {
         const tempStream = await navigator.mediaDevices.getUserMedia({
@@ -314,98 +316,97 @@
       };
 
       try {
-        setStatus("正在启动后置相机...");
+        setStatus("正在启动相机...");
+        await html5QrCode.start(
+          { facingMode: { exact: "environment" } },
+          config,
+          onScanSuccess,
+          onScanFailure
+        );
+        if (mySession !== sessionId) return;
+        scannerStarted = true;
+        setStatus("请把二维码放到框内");
+        return;
+      } catch (e1) {
+        console.log("exact environment 启动失败:", e1);
+      }
+
+      try {
+        setStatus("正在尝试兼容模式...");
         await html5QrCode.start(
           { facingMode: "environment" },
           config,
           onScanSuccess,
           onScanFailure
         );
-        scannerStarted = true;
-        setStatus("请把二维码放到框内");
-        return;
-      } catch (e1) {
-        console.log("后置相机启动失败:", e1);
-      }
-
-      try {
-        setStatus("正在寻找可用摄像头...");
-        const devices = await Html5Qrcode.getCameras();
-
-        if (!devices || devices.length === 0) {
-          throw new Error("NO_CAMERA_FOUND");
-        }
-
-        const backCamera = devices.find(device =>
-          /back|rear|environment|后|背/i.test(device.label || "")
-        );
-
-        const cameraId = backCamera ? backCamera.id : devices[0].id;
-
-        setStatus("正在启动摄像头...");
-        await html5QrCode.start(
-          cameraId,
-          config,
-          onScanSuccess,
-          onScanFailure
-        );
+        if (mySession !== sessionId) return;
         scannerStarted = true;
         setStatus("请把二维码放到框内");
         return;
       } catch (e2) {
-        console.log("cameraId 启动失败:", e2);
+        console.log("environment 启动失败:", e2);
       }
 
-      alert("相机启动失败。请尽量使用 Safari 打开，并检查系统相机权限。");
+      try {
+        setStatus("正在尝试备用模式...");
+        await html5QrCode.start(
+          { facingMode: "user" },
+          {
+            ...config,
+            fps: 10
+          },
+          onScanSuccess,
+          onScanFailure
+        );
+        if (mySession !== sessionId) return;
+        scannerStarted = true;
+        setStatus("请把二维码放到框内");
+        return;
+      } catch (e3) {
+        console.log("user camera 启动失败:", e3);
+      }
+
+      // 不再弹 alert，避免非常明显的错误弹窗
+      setStatus("相机暂时启动失败，请退出后重试，或确认 Safari 相机权限已开启。");
       await stopScannerSilently();
       await clearScannerSilently();
       html5QrCode = null;
-      showHome();
     }
 
     function onScanFailure(error) {
-      // 连续扫描失败属于正常现象，这里不弹窗
+      // 连续扫描失败属于正常现象，不处理
     }
 
     async function onScanSuccess(decodedText) {
       if (scanHandled) return;
       scanHandled = true;
 
+      const cleanText = String(decodedText || "").trim();
+      if (!cleanText) {
+        scanHandled = false;
+        return;
+      }
+
+      currentAudioFile = cleanText + ".mp3";
+      console.log("扫码结果:", cleanText, "=>", currentAudioFile);
+
+      // 先切到播放页
+      showPlayer();
+
       try {
-        const cleanText = String(decodedText || "").trim();
-        if (!cleanText) {
-          scanHandled = false;
-          return;
-        }
-
-        currentAudioFile = cleanText + ".mp3";
-        console.log("扫码结果:", cleanText, "=>", currentAudioFile);
-
-        // 先切到播放页，避免 stop() 报错时又跳回首页
-        showPlayer();
-
         audio.src = encodeURI(currentAudioFile);
         audio.load();
-
-        try {
-          await audio.play();
-        } catch (e) {
-          console.log("自动播放失败，需要手动点击:", e);
-        }
-
-        // 再静默关相机，不弹错
-        stopScannerSilently();
-      } catch (err) {
-        console.error("扫码成功后处理失败:", err);
-        alert("二维码识别成功，但播放音频失败。请检查 mp3 文件名是否和二维码内容一致。");
+        await audio.play();
+      } catch (e) {
+        console.log("自动播放失败，需要手动点击:", e);
       }
+
+      // 再静默关相机，绝不弹窗
+      stopScannerSilently();
     }
 
     async function playCurrentAudio() {
-      if (!currentAudioFile) {
-        alert("还没有扫描到音频。");
-        return;
-      }
+      if (!currentAudioFile) return;
 
       try {
         audio.src = encodeURI(currentAudioFile);
@@ -413,7 +414,6 @@
         await audio.play();
       } catch (err) {
         console.log("播放失败:", err);
-        alert("播放失败，请确认 mp3 文件存在，并且文件名和二维码内容一致。");
       }
     }
 
@@ -424,8 +424,6 @@
 
     async function rescanNext() {
       stopAudio();
-      currentAudioFile = "";
-      scanHandled = false;
       await startScanner();
     }
 
