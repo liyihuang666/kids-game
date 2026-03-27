@@ -1,261 +1,382 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>小班听说游戏</title>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+  />
+  <title>小班听说游戏</title>
 
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
+  <!-- 建议固定版本，避免 CDN 最新版带来不稳定 -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
-            background-color: #F1F8E9;
-            margin: 0;
-            padding: 20px;
-            text-align: center;
-        }
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
+      background-color: #F1F8E9;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+      -webkit-user-select: none;
+      user-select: none;
+    }
 
-        #setup-screen {
-            margin-top: 120px;
-        }
+    #setup-screen {
+      margin-top: 100px;
+    }
 
-        .big-btn {
-            padding: 40px 80px;
-            font-size: 32px;
-            border-radius: 80px;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            box-shadow: 0 12px 0 #2E7D32;
-            cursor: pointer;
-        }
+    .big-btn {
+      padding: 34px 64px;
+      font-size: 30px;
+      border-radius: 999px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      box-shadow: 0 10px 0 #2E7D32;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
 
-        #reader {
-            width: 100%;
-            max-width: 500px;
-            margin: 20px auto 0;
-            border: 15px solid white;
-            border-radius: 40px;
-            overflow: hidden;
-            display: none;
-            background: #000;
-        }
+    #reader-wrap {
+      display: none;
+      margin-top: 20px;
+    }
 
-        #play-btn {
-            display: none;
-            width: 280px;
-            height: 280px;
-            background: #FF9800;
-            color: white;
-            border: none;
-            border-radius: 50%;
-            font-size: 120px;
-            margin: 50px auto;
-            box-shadow: 0 15px 0 #E65100;
-            cursor: pointer;
-        }
+    #reader {
+      width: 100%;
+      max-width: 560px;
+      margin: 0 auto;
+      border: 12px solid #fff;
+      border-radius: 28px;
+      overflow: hidden;
+      background: #000;
+    }
 
-        .status {
-            font-size: 26px;
-            color: #333;
-            margin-top: 30px;
-            font-weight: bold;
-            line-height: 1.5;
-        }
+    #status {
+      font-size: 24px;
+      color: #333;
+      margin-top: 24px;
+      font-weight: bold;
+      line-height: 1.5;
+      min-height: 40px;
+    }
 
-        .small-text {
-            color: #888;
-            margin-top: 30px;
-            font-size: 18px;
-        }
+    #play-screen {
+      display: none;
+      margin-top: 40px;
+    }
 
-        .link-btn {
-            text-decoration: underline;
-            color: #999;
-            margin-top: 30px;
-            cursor: pointer;
-            font-size: 20px;
-        }
-    </style>
+    #play-btn {
+      display: none;
+      width: 240px;
+      height: 240px;
+      background: #FF9800;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      font-size: 96px;
+      box-shadow: 0 12px 0 #E65100;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .small-text {
+      color: #888;
+      margin-top: 24px;
+      font-size: 18px;
+    }
+
+    .link-btn {
+      text-decoration: underline;
+      color: #777;
+      margin-top: 24px;
+      cursor: pointer;
+      font-size: 20px;
+    }
+
+    .helper {
+      font-size: 18px;
+      color: #666;
+      margin-top: 10px;
+      line-height: 1.6;
+    }
+  </style>
 </head>
 <body>
+  <div id="setup-screen">
+    <h1 style="color:#2E7D32;">听说游戏开始啦</h1>
+    <button class="big-btn" id="start-btn">点我开始</button>
+    <p class="small-text">(老师请帮小朋友点一下)</p>
+  </div>
 
-    <div id="setup-screen">
-        <h1 style="color: #2E7D32;">听说游戏开始啦</h1>
-        <button class="big-btn" onclick="startApp()">点我开始</button>
-        <p class="small-text">(老师请帮小朋友点一下)</p>
-    </div>
-
+  <div id="reader-wrap">
     <div id="reader"></div>
-    <div id="status" class="status"></div>
+    <div id="status"></div>
+    <div class="helper">请把二维码放近一点、正对镜头、光线亮一点</div>
+  </div>
 
-    <div id="play-screen" style="display:none;">
-        <button id="play-btn" onclick="playAudio()">▶️</button>
-        <p class="status" style="color: #FF9800;">找到声音啦！快点球球</p>
-        <p class="link-btn" onclick="resetGame()">换一张卡片</p>
-    </div>
+  <div id="play-screen">
+    <button id="play-btn">▶️</button>
+    <p id="play-tip" class="status" style="color:#FF9800;">找到声音啦！快点球球</p>
+    <p class="link-btn" id="reset-btn">换一张卡片</p>
+  </div>
 
-    <audio id="audio-player" playsinline webkit-playsinline></audio>
+  <audio id="audio-player" playsinline webkit-playsinline preload="auto"></audio>
 
-    <script>
-        const audio = document.getElementById("audio-player");
-        const setupScreen = document.getElementById("setup-screen");
-        const reader = document.getElementById("reader");
-        const statusText = document.getElementById("status");
-        const playScreen = document.getElementById("play-screen");
-        const playBtn = document.getElementById("play-btn");
+  <script>
+    const audio = document.getElementById("audio-player");
+    const setupScreen = document.getElementById("setup-screen");
+    const readerWrap = document.getElementById("reader-wrap");
+    const reader = document.getElementById("reader");
+    const statusText = document.getElementById("status");
+    const playScreen = document.getElementById("play-screen");
+    const playBtn = document.getElementById("play-btn");
+    const startBtn = document.getElementById("start-btn");
+    const resetBtn = document.getElementById("reset-btn");
 
-        let html5QrCode;
-        let scanLocked = false;
-        let scannerStarted = false;
+    let html5QrCode = null;
+    let scannerStarted = false;
+    let isHandlingSuccess = false;
 
-        async function unlockAudio() {
-            audio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
-            try {
-                await audio.play();
-                audio.pause();
-                audio.currentTime = 0;
-            } catch (e) {
-                console.log("音频解锁失败:", e);
-            }
+    function setStatus(text) {
+      statusText.innerText = text || "";
+    }
+
+    async function unlockAudio() {
+      // iOS 音频解锁
+      audio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
+      try {
+        await audio.play();
+        audio.pause();
+        audio.currentTime = 0;
+      } catch (e) {
+        console.log("音频解锁失败:", e);
+      }
+    }
+
+    function getQrboxSize(viewfinderWidth, viewfinderHeight) {
+      const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+      const size = Math.floor(minEdge * 0.72);
+      return {
+        width: Math.max(220, Math.min(size, 360)),
+        height: Math.max(220, Math.min(size, 360))
+      };
+    }
+
+    async function stopScannerSafely() {
+      if (html5QrCode && scannerStarted) {
+        try {
+          await html5QrCode.stop();
+        } catch (e) {
+          console.log("stop scanner error:", e);
+        }
+      }
+      scannerStarted = false;
+    }
+
+    async function resetGame() {
+      await stopScannerSafely();
+
+      try {
+        await html5QrCode?.clear();
+      } catch (e) {
+        console.log("clear scanner error:", e);
+      }
+
+      audio.pause();
+      audio.currentTime = 0;
+      audio.removeAttribute("src");
+      audio.load();
+
+      isHandlingSuccess = false;
+
+      setupScreen.style.display = "block";
+      readerWrap.style.display = "none";
+      playScreen.style.display = "none";
+      playBtn.style.display = "none";
+      setStatus("");
+    }
+
+    async function onScanSuccess(decodedText) {
+      if (isHandlingSuccess) return;
+      isHandlingSuccess = true;
+
+      try {
+        const cleanText = String(decodedText || "").trim();
+        if (!cleanText) {
+          isHandlingSuccess = false;
+          return;
         }
 
-        async function startApp() {
-            scanLocked = false;
+        const fileName = cleanText + ".mp3";
+        console.log("扫码结果:", cleanText, "=>", fileName);
 
-            await unlockAudio();
+        await stopScannerSafely();
 
-            setupScreen.style.display = "none";
-            playScreen.style.display = "none";
-            playBtn.style.display = "none";
-            reader.style.display = "block";
-            statusText.style.display = "block";
-            statusText.innerText = "正在启动相机...";
+        readerWrap.style.display = "none";
+        playScreen.style.display = "block";
+        playBtn.style.display = "inline-block";
 
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                alert("当前浏览器不支持相机，请使用 Safari 打开。");
-                resetGame();
-                return;
-            }
+        audio.src = encodeURI(fileName);
+        audio.load();
 
-            if (!window.isSecureContext) {
-                alert("当前网页不是 HTTPS 安全环境，无法调用相机。");
-                resetGame();
-                return;
-            }
+        try {
+          await audio.play();
+        } catch (e) {
+          console.log("自动播放失败，需要手动点击:", e);
+        }
+      } catch (err) {
+        console.error("扫码成功后处理失败:", err);
+        alert("二维码识别成功，但播放音频失败。请检查 mp3 文件名是否和二维码内容一致。");
+        isHandlingSuccess = false;
+      }
+    }
 
-            if (!html5QrCode) {
-                html5QrCode = new Html5Qrcode("reader");
-            }
+    function onScanFailure(error) {
+      // 移动端持续失败是正常的，不弹窗
+      // console.log("scan failure:", error);
+    }
 
-            const config = {
-                fps: 15,
-                qrbox: { width: 300, height: 300 },
-                aspectRatio: 1.0
-            };
+    async function startWithConfig(cameraConfig, config) {
+      await html5QrCode.start(
+        cameraConfig,
+        config,
+        onScanSuccess,
+        onScanFailure
+      );
+      scannerStarted = true;
+    }
 
-            try {
-                // 先试最常见的 iPhone 后摄方式
-                await html5QrCode.start(
-                    { facingMode: { exact: "environment" } },
-                    config,
-                    onScanSuccess,
-                    onScanFailure
-                );
-                scannerStarted = true;
-                statusText.innerText = "请把二维码放到框内，稍微靠近一点";
-            } catch (e1) {
-                console.log("exact environment 失败:", e1);
+    async function startScanner() {
+      if (!window.isSecureContext) {
+        alert("当前网页不是安全环境，摄像头无法开启。请确认使用的是 GitHub Pages 的 https 链接。");
+        return;
+      }
 
-                try {
-                    // 退一步，用普通后摄
-                    await html5QrCode.start(
-                        { facingMode: "environment" },
-                        config,
-                        onScanSuccess,
-                        onScanFailure
-                    );
-                    scannerStarted = true;
-                    statusText.innerText = "请把二维码放到框内，稍微靠近一点";
-                } catch (e2) {
-                    console.log("environment 失败:", e2);
-                    alert("相机打开失败，请刷新页面后重试，并确认已允许 Safari 使用相机。");
-                    resetGame();
-                }
-            }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("当前浏览器不支持摄像头。请使用 Safari 打开。");
+        return;
+      }
+
+      await unlockAudio();
+
+      setupScreen.style.display = "none";
+      playScreen.style.display = "none";
+      readerWrap.style.display = "block";
+      setStatus("正在请求相机权限...");
+
+      if (!html5QrCode) {
+        html5QrCode = new Html5Qrcode(
+          "reader",
+          {
+            formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+            verbose: false
+          }
+        );
+      }
+
+      // 先触发系统权限弹窗
+      try {
+        const tempStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false
+        });
+        tempStream.getTracks().forEach(track => track.stop());
+      } catch (e) {
+        console.log("预请求相机失败:", e);
+      }
+
+      const config = {
+        fps: 12,
+        qrbox: getQrboxSize,
+        rememberLastUsedCamera: true,
+        showTorchButtonIfSupported: true,
+        showZoomSliderIfSupported: true,
+        experimentalFeatures: {
+          // iPhone / Safari 上禁用不稳定路径，通常更稳
+          useBarCodeDetectorIfSupported: false
+        }
+      };
+
+      try {
+        setStatus("正在启动后置相机...");
+        // 第一优先：直接用后置摄像头
+        await startWithConfig({ facingMode: "environment" }, config);
+        setStatus("请把二维码放到框内");
+        return;
+      } catch (e1) {
+        console.log("facingMode environment 启动失败:", e1);
+      }
+
+      try {
+        setStatus("正在寻找可用摄像头...");
+        const devices = await Html5Qrcode.getCameras();
+
+        if (!devices || devices.length === 0) {
+          throw new Error("NO_CAMERA_FOUND");
         }
 
-        function onScanFailure(error) {
-            // 扫描过程中频繁失败属于正常现象，不弹窗
-            // console.log("scan failure:", error);
-        }
+        console.log("可用摄像头:", devices);
 
-        async function onScanSuccess(decodedText) {
-            if (scanLocked) return;
-            scanLocked = true;
+        const backCamera = devices.find(device =>
+          /back|rear|environment|后|背/i.test(device.label || "")
+        );
 
-            const cleanText = decodedText.trim();
-            const fileName = cleanText + ".mp3";
+        const cameraId = backCamera ? backCamera.id : devices[0].id;
 
-            console.log("扫码结果:", cleanText);
-            console.log("将播放文件:", fileName);
+        setStatus("正在启动摄像头...");
+        await startWithConfig(cameraId, config);
+        setStatus("请把二维码放到框内");
+        return;
+      } catch (e2) {
+        console.log("cameraId 启动失败:", e2);
+      }
 
-            try {
-                if (scannerStarted && html5QrCode) {
-                    await html5QrCode.stop();
-                    scannerStarted = false;
-                }
-            } catch (e) {
-                console.log("停止扫码器失败:", e);
-            }
+      try {
+        setStatus("正在尝试兼容模式...");
+        // 最后兜底：不指定后置，先能开起来
+        await startWithConfig(
+          { facingMode: "user" },
+          {
+            ...config,
+            fps: 10
+          }
+        );
+        setStatus("相机已开启，请把二维码尽量贴近镜头");
+        return;
+      } catch (e3) {
+        console.error("所有启动方式都失败:", e3);
+      }
 
-            reader.style.display = "none";
-            statusText.style.display = "none";
-            playScreen.style.display = "block";
-            playBtn.style.display = "block";
+      alert("相机启动失败。请务必使用 Safari 打开，并在系统设置里允许相机权限。");
+      await resetGame();
+    }
 
-            audio.src = encodeURI(fileName);
+    async function playAudio() {
+      try {
+        await audio.play();
+      } catch (err) {
+        console.log("手动播放失败:", err);
+        alert("播放失败，请确认 mp3 文件存在，并且文件名与二维码内容一致。");
+      }
+    }
 
-            try {
-                await audio.play();
-            } catch (e) {
-                console.log("自动播放失败，需要手动点击:", e);
-            }
+    startBtn.addEventListener("click", startScanner);
+    playBtn.addEventListener("click", playAudio);
+    resetBtn.addEventListener("click", resetGame);
 
-            audio.onerror = function () {
-                alert("识别到了二维码，但没有找到对应音频： " + fileName + "。请检查 GitHub 里的 mp3 文件名是否完全一致。");
-            };
-        }
+    // 页面切后台时自动停相机，避免 iPhone 占用导致下次打不开
+    document.addEventListener("visibilitychange", async () => {
+      if (document.hidden) {
+        await stopScannerSafely();
+      }
+    });
 
-        function playAudio() {
-            audio.play().catch(err => {
-                console.log("手动播放失败:", err);
-                alert("播放失败，请检查音频文件名是否正确。");
-            });
-        }
-
-        async function resetGame() {
-            try {
-                if (scannerStarted && html5QrCode) {
-                    await html5QrCode.stop();
-                    scannerStarted = false;
-                }
-            } catch (e) {
-                console.log("停止扫码器失败:", e);
-            }
-
-            audio.pause();
-            audio.currentTime = 0;
-            audio.src = "";
-            scanLocked = false;
-
-            setupScreen.style.display = "block";
-            reader.style.display = "none";
-            playScreen.style.display = "none";
-            statusText.style.display = "none";
-            playBtn.style.display = "none";
-        }
-    </script>
+    // 防止 iOS 返回页面后相机状态异常
+    window.addEventListener("pagehide", async () => {
+      await stopScannerSafely();
+    });
+  </script>
 </body>
 </html>
