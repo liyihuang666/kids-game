@@ -3,108 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>小班听说游戏机</title>
+    <title>小班听说游戏</title>
     <script src="https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/html5-qrcode/2.2.0/html5-qrcode.min.js"></script>
     <style>
-        :root { --green: #4CAF50; --orange: #FF9800; --bg: #F1F8E9; }
-        body { font-family: -apple-system, sans-serif; background-color: var(--bg); margin: 0; padding: 20px; text-align: center; }
-        
-        /* 启动画面 */
-        #setup-screen { margin-top: 100px; }
+        body { font-family: -apple-system, sans-serif; background-color: #F1F8E9; margin: 0; padding: 20px; text-align: center; }
+        #setup-screen { margin-top: 120px; }
         .big-btn { 
-            padding: 30px 60px; font-size: 30px; border-radius: 60px; 
-            background: var(--green); color: white; border: none; 
-            box-shadow: 0 10px 0 #2E7D32; cursor: pointer;
+            padding: 40px 80px; font-size: 32px; border-radius: 80px; 
+            background: #4CAF50; color: white; border: none; 
+            box-shadow: 0 12px 0 #2E7D32; cursor: pointer;
+            -webkit-appearance: none; /* 解决 iOS 按钮默认样式 */
         }
-
-        /* 扫描区域 */
         #reader { 
-            width: 100%; max-width: 500px; margin: 20px auto; 
-            border: 12px solid white; border-radius: 40px; 
-            box-shadow: 0 15px 30px rgba(0,0,0,0.1); overflow: hidden; display: none;
+            width: 100%; max-width: 500px; margin: 0 auto; 
+            border: 15px solid white; border-radius: 40px; 
+            overflow: hidden; display: none; background: #000;
         }
-
-        /* 播放界面 */
-        #play-container { display: none; }
         #play-btn { 
-            width: 280px; height: 280px; background: var(--orange); 
+            display: none; width: 280px; height: 280px; background: #FF9800; 
             color: white; border: none; border-radius: 50%; 
-            font-size: 100px; margin: 40px auto; 
-            box-shadow: 0 12px 0 #E65100; animation: pulse 1.5s infinite;
+            font-size: 120px; margin: 50px auto; 
+            box-shadow: 0 15px 0 #E65100;
         }
-
-        .status-text { font-size: 26px; color: #333; margin-top: 30px; font-weight: bold; }
-        #re-scan { margin-top: 40px; color: #666; font-size: 18px; text-decoration: underline; }
-
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+        .status { font-size: 26px; color: #333; margin-top: 30px; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div id="setup-screen">
-        <h1 style="color: #2E7D32; font-size: 32px;">准备好了吗？</h1>
-        <button class="big-btn" onclick="initGame()">点我开始</button>
-        <p style="color: #888; margin-top: 20px;">老师点一下，小朋友就能玩啦</p>
+        <button class="big-btn" onclick="startNow()">点我开始</button>
+        <p style="color: #666; margin-top: 30px;">(点一下，开启相机哦)</p>
     </div>
 
     <div id="reader"></div>
-    <div id="status" class="status-text"></div>
+    <div id="status" class="status"></div>
+    <button id="play-btn" onclick="playAudio()">▶️</button>
 
-    <div id="play-container">
-        <button id="play-btn" onclick="playAudio()">▶️</button>
-        <p class="status-text" style="color: var(--orange);">找到声音啦！点点球</p>
-        <div id="re-scan" onclick="resetScan()">换一张卡片</div>
-    </div>
-
-    <audio id="main-audio"></audio>
+    <audio id="audio-player" preload="auto"></audio>
 
     <script>
-        const audio = document.getElementById('main-audio');
-        const setupScreen = document.getElementById('setup-screen');
-        const readerDiv = document.getElementById('reader');
-        const playContainer = document.getElementById('play-container');
-        const statusText = document.getElementById('status');
-        let scanner;
+        const audio = document.getElementById('audio-player');
+        let html5QrCode;
 
-        function initGame() {
-            // 解决 iOS 音频激活
+        // 核心：点击按钮立即触发相机请求
+        async function startNow() {
+            // 1. 立即激活音频权限（iOS 必须由点击触发）
             audio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
-            audio.play().then(() => {
-                setupScreen.style.display = 'none';
-                readerDiv.style.display = 'block';
-                statusText.innerText = "请把卡片放到框框里...";
-                startCamera();
-            });
-        }
+            try { await audio.play(); } catch(e) {}
 
-        function startCamera() {
-            scanner = new Html5Qrcode("reader");
-            scanner.start(
-                { facingMode: "environment" }, 
-                { fps: 10, qrbox: { width: 280, height: 280 } },
-                (text) => {
-                    const num = text.trim();
-                    audio.src = num + ".mp3"; 
-                    
-                    readerDiv.style.display = 'none';
-                    playContainer.style.display = 'block';
-                    statusText.style.display = 'none';
-                    
-                    audio.play();
-                }
-            ).catch(err => {
-                alert("相机开启失败！请确保弹出提示时点击了'允许'。");
+            document.getElementById('setup-screen').style.display = 'none';
+            document.getElementById('reader').style.display = 'block';
+            document.getElementById('status').innerText = "正在打开相机...";
+
+            // 2. 启动相机
+            if (!html5QrCode) {
+                html5QrCode = new Html5Qrcode("reader");
+            }
+
+            const config = { fps: 10, qrbox: { width: 280, height: 280 } };
+            
+            html5QrCode.start({ facingMode: "environment" }, config, (text) => {
+                // 扫码成功
+                const fileName = text.trim() + ".mp3";
+                audio.src = fileName;
+                
+                document.getElementById('reader').style.display = 'none';
+                document.getElementById('play-btn').style.display = 'block';
+                document.getElementById('status').innerText = "找到声音啦！点点球";
+                audio.play();
+            }).catch(err => {
+                alert("相机启动失败：\n1. 请确认点过'允许'\n2. 检查地址栏左侧是否有禁用相机的标志");
+                console.error(err);
+                location.reload(); // 失败则尝试重载
             });
         }
 
         function playAudio() { audio.play(); }
-
-        function resetScan() {
-            playContainer.style.display = 'none';
-            readerDiv.style.display = 'block';
-            statusText.style.display = 'block';
-            statusText.innerText = "请把卡片放到框框里...";
-        }
     </script>
 </body>
 </html>
